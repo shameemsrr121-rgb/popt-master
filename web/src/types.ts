@@ -60,6 +60,7 @@ export interface InventoryItem {
   sku: string;
   name: string;
   category: string;
+  type?: 'Textile' | 'Readymade';
   unit: string;
   unit_cost: number;
   standard_selling_price: number;
@@ -75,6 +76,14 @@ export interface InventoryItem {
   category4: string; // Fit
   category5: string; // Size
   category6: string; // Color
+}
+
+export interface StoreHierarchyItem {
+  id?: string;
+  division: string;
+  section: string;
+  department: string;
+  type: 'Textile' | 'Readymade';
 }
 
 export interface PurchaseOrderItem {

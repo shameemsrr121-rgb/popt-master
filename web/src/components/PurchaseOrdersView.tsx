@@ -144,7 +144,8 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
     const unitPrice = invItem.unit_cost || 0;
     const calcResult = calculateTaxRate({
       itemName: invItem.name,
-      category: invItem.category || invItem.division,
+      category: invItem.category || invItem.type || invItem.division,
+      type: invItem.type || (invItem.category === 'Textile' ? 'Textile' : 'Readymade'),
       division: invItem.division,
       department: invItem.department,
       section: invItem.section,

@@ -58,6 +58,7 @@ export function isTextileKeyword(text?: string): boolean {
 export function calculateTaxRate(params: {
   itemName?: string;
   category?: string;
+  type?: 'Textile' | 'Readymade' | string;
   division?: string;
   department?: string;
   section?: string;
@@ -68,6 +69,7 @@ export function calculateTaxRate(params: {
   const {
     itemName = '',
     category = '',
+    type = '',
     division = '',
     department = '',
     section = '',
@@ -79,6 +81,7 @@ export function calculateTaxRate(params: {
   const cost = Number(unitCost) || 0;
   const trimmedName = itemName.trim();
   const trimmedCat = category.trim();
+  const trimmedType = type.trim();
   const trimmedDiv = division.trim();
   const trimmedDept = department.trim();
   const trimmedSec = section.trim();
@@ -91,6 +94,7 @@ export function calculateTaxRate(params: {
 
       const matches =
         (trimmedCat && ruleCat === trimmedCat.toLowerCase()) ||
+        (trimmedType && ruleCat === trimmedType.toLowerCase()) ||
         (trimmedDept && ruleCat === trimmedDept.toLowerCase()) ||
         (trimmedDiv && ruleCat === trimmedDiv.toLowerCase()) ||
         (trimmedSec && ruleCat === trimmedSec.toLowerCase()) ||
@@ -114,9 +118,12 @@ export function calculateTaxRate(params: {
     }
   }
 
-  // 2. Check if Textile (ALWAYS 5.0% flat GST)
+  // 2. Check if explicit or inferred Textile (ALWAYS 5.0% flat GST)
+  const isExplicitTextile = trimmedType.toLowerCase() === CATEGORY_TEXTILE.toLowerCase() ||
+                            trimmedCat.toLowerCase() === CATEGORY_TEXTILE.toLowerCase();
+
   const isTextile =
-    trimmedCat.toLowerCase() === CATEGORY_TEXTILE.toLowerCase() ||
+    isExplicitTextile ||
     trimmedDiv.toLowerCase() === CATEGORY_TEXTILE.toLowerCase() ||
     trimmedSec.toLowerCase() === CATEGORY_TEXTILE.toLowerCase() ||
     trimmedDept.toLowerCase() === CATEGORY_TEXTILE.toLowerCase() ||
@@ -175,6 +182,7 @@ function computeBreakdown(rate: number, isInterState: boolean) {
 export function getTaxFlowBadge(params: {
   itemName?: string;
   category?: string;
+  type?: 'Textile' | 'Readymade' | string;
   division?: string;
   department?: string;
   section?: string;
