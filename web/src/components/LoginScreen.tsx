@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, User as UserIcon, ArrowRight, ShieldCheck, Radio } from 'lucide-react';
+import { Lock, User as UserIcon, ArrowRight, ShieldCheck } from 'lucide-react';
 import { User } from '../types';
 import { supabase } from '../lib/supabase';
 
@@ -58,10 +58,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           </div>
           <h1 className="text-2xl font-black text-white tracking-tight">POPT Master</h1>
           <p className="text-xs text-slate-400 mt-1">Purchase Order Master, Sourcing Planner & Receiving</p>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 mt-3">
-            <Radio className="w-3 h-3 animate-pulse text-emerald-400" />
-            Connected to Central Supabase
-          </div>
         </div>
 
         {errorMessage && (

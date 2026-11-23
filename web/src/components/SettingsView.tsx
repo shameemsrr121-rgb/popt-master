@@ -7,12 +7,12 @@ import {
   Plus,
   Trash2,
   Database,
-  Radio,
   Lock,
   Warehouse,
   CheckCircle,
   Percent,
   Calculator,
+  Download,
 } from 'lucide-react';
 import { CompanyProfile, User, Location, TaxRule } from '../types';
 import { supabase } from '../lib/supabase';
@@ -313,7 +313,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">System &amp; Admin Settings</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Configure company branding, manage team access credentials, and monitor Supabase sync
+            Configure company branding, manage team access credentials, and system settings
           </p>
         </div>
 
@@ -353,24 +353,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
-      {/* Database Connection Status Card */}
-      <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+      {/* System & Database Info Card */}
+      <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300">
+          <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300">
             <Database className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-sm">Supabase Central Hub Connected</span>
-              <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-400">
-                <Radio className="w-3 h-3 animate-pulse" /> Live
+              <span className="font-semibold text-sm text-slate-200">System Database</span>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800 text-emerald-400 border border-emerald-500/30">
+                Connected
               </span>
             </div>
-            <p className="text-xs text-slate-400 font-mono mt-0.5">https://jprczpvqumxwsjzjtvgo.supabase.co</p>
+            <p className="text-xs text-slate-400 mt-0.5">Real-time sync enabled across web portal and mobile app</p>
           </div>
         </div>
-        <div className="text-xs text-slate-300">
-          Mobile apps &amp; web portal share real-time updates via WebSockets
+        <div className="flex items-center gap-3">
+          <a
+            href="/POPT-Master.apk"
+            download="POPT-Master.apk"
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 text-indigo-300 hover:text-white hover:bg-indigo-600 transition-all border border-slate-700"
+            title="Download Android APK (4.2 MB)"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Download Android APK</span>
+          </a>
         </div>
       </div>
 
