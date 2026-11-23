@@ -87,7 +87,6 @@ export const InventorySuppliersView: React.FC<InventorySuppliersViewProps> = ({
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [gstNumber, setGstNumber] = useState('');
-  const [paymentTerms, setPaymentTerms] = useState('Net 30');
 
   // Quick Add Store Hierarchy Modal Form
   const [newHDivision, setNewHDivision] = useState('');
@@ -371,7 +370,7 @@ export const InventorySuppliersView: React.FC<InventorySuppliersViewProps> = ({
         phone: phone.trim(),
         email: email.trim(),
         gst_number: gstNumber.trim(),
-        payment_terms: paymentTerms,
+        payment_terms: '',
         rating: 4.5,
         is_active: true
       });
@@ -769,9 +768,6 @@ export const InventorySuppliersView: React.FC<InventorySuppliersViewProps> = ({
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border">
                   {s.code}
-                </span>
-                <span className="text-xs font-semibold text-emerald-600">
-                  {s.payment_terms}
                 </span>
               </div>
 
@@ -1367,30 +1363,15 @@ export const InventorySuppliersView: React.FC<InventorySuppliersViewProps> = ({
                   required
                 />
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs font-semibold text-slate-700">Code (Optional)</label>
-                  <input
-                    type="text"
-                    placeholder="SUP-01"
-                    value={suppCode}
-                    onChange={(e) => setSuppCode(e.target.value)}
-                    className="w-full px-3 py-1.5 border rounded-xl text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-700">Payment Terms</label>
-                  <select
-                    value={paymentTerms}
-                    onChange={(e) => setPaymentTerms(e.target.value)}
-                    className="w-full px-3 py-1.5 border rounded-xl text-sm"
-                  >
-                    <option value="Net 30">Net 30</option>
-                    <option value="Net 60">Net 60</option>
-                    <option value="COD">COD</option>
-                    <option value="Advance">Advance</option>
-                  </select>
-                </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-700">Code (Optional)</label>
+                <input
+                  type="text"
+                  placeholder="SUP-01"
+                  value={suppCode}
+                  onChange={(e) => setSuppCode(e.target.value)}
+                  className="w-full px-3 py-1.5 border rounded-xl text-sm"
+                />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>

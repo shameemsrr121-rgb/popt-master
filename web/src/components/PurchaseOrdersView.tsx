@@ -59,7 +59,6 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
   const [deliveryDate, setDeliveryDate] = useState(
     new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
   );
-  const [paymentTerms, setPaymentTerms] = useState('Net 30');
   const [locationName, setLocationName] = useState('Central Warehouse');
   const [notes, setNotes] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -274,7 +273,7 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
           supplier_name: supplierName,
           order_date_millis: orderDateMillis,
           expected_delivery_date_millis: expectedDeliveryMillis,
-          payment_terms: paymentTerms,
+          payment_terms: '',
           status: 'ISSUED',
           subtotal: subtotal,
           tax_amount: totalTax,
@@ -549,7 +548,7 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
 
             <form onSubmit={handleCreatePO} className="mt-5 space-y-6">
               {/* Top metadata fields */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 {/* Supplier */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Supplier / Vendor *</label>
@@ -576,21 +575,6 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     required
                   />
-                </div>
-
-                {/* Payment Terms */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Payment Terms</label>
-                  <select
-                    value={paymentTerms}
-                    onChange={(e) => setPaymentTerms(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="Net 30">Net 30 Days</option>
-                    <option value="Net 60">Net 60 Days</option>
-                    <option value="COD">Cash on Delivery (COD)</option>
-                    <option value="Advance">100% Advance</option>
-                  </select>
                 </div>
 
                 {/* Target Location */}
@@ -1080,7 +1064,6 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                 <div>
                   <div className="font-bold text-slate-400 uppercase tracking-wider mb-1">Vendor / Supplier:</div>
                   <div className="text-sm font-bold text-slate-900">{selectedPOForView.supplier_name}</div>
-                  <div className="text-slate-600 mt-0.5">Payment Terms: {selectedPOForView.payment_terms}</div>
                 </div>
                 <div>
                   <div className="font-bold text-slate-400 uppercase tracking-wider mb-1">Deliver To:</div>
