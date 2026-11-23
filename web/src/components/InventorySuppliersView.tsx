@@ -57,7 +57,6 @@ export const InventorySuppliersView: React.FC<InventorySuppliersViewProps> = ({
   const [isAddHierarchyOpen, setIsAddHierarchyOpen] = useState(false);
 
   // Add Product Form: 3-Level Hierarchy & Tax Type
-  const [sku, setSku] = useState('');
   const [name, setName] = useState('');
   const [selectedDivision, setSelectedDivision] = useState('');
   const [isCustomDivision, setIsCustomDivision] = useState(false);
@@ -266,10 +265,12 @@ export const InventorySuppliersView: React.FC<InventorySuppliersViewProps> = ({
 
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!sku.trim() || !name.trim()) {
-      alert('Please enter SKU and Item Name');
+    if (!name.trim()) {
+      alert('Please enter Item Name');
       return;
     }
+
+    const autoSku = `PROD-${Date.now().toString().slice(-6)}`;
 
     const finalDivision = (isCustomDivision ? customDivisionText.trim() : selectedDivision.trim());
     const finalSection = (isCustomSection ? customSectionText.trim() : selectedSection.trim());
@@ -297,7 +298,7 @@ export const InventorySuppliersView: React.FC<InventorySuppliersViewProps> = ({
 
       // 1. Insert into inventory (storing type in category column and as part of inventory record)
       const { error } = await supabase.from('inventory').insert({
-        sku: sku.trim().toUpperCase(),
+        sku: autoSku,
         name: name.trim(),
         division: finalDivision,
         section: finalSection,
@@ -315,7 +316,7 @@ export const InventorySuppliersView: React.FC<InventorySuppliersViewProps> = ({
         // Fallback without photo_uri column if table schema doesn't have it
         if (error.message?.includes('photo_uri') || error.code === 'PGRST204') {
           const { error: retryError } = await supabase.from('inventory').insert({
-            sku: sku.trim().toUpperCase(),
+            sku: autoSku,
             name: name.trim(),
             division: finalDivision,
             section: finalSection,
@@ -345,7 +346,6 @@ export const InventorySuppliersView: React.FC<InventorySuppliersViewProps> = ({
       await loadHierarchy();
 
       setIsAddProductOpen(false);
-      setSku('');
       setName('');
       setSelectedPhotoFile(null);
       setPreviewPhotoUrl(null);
@@ -557,7 +557,7 @@ export const InventorySuppliersView: React.FC<InventorySuppliersViewProps> = ({
               <table className="w-full text-left text-sm">
                 <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase font-bold text-slate-500">
                   <tr>
-                    <th className="py-3 px-4">Item / SKU</th>
+                    <th className="py-3 px-4">Photo</th>
                     <th className="py-3 px-4">Item Name</th>
                     <th className="py-3 px-4">Hierarchy (Div &gt; Sec &gt; Dept)</th>
                     <th className="py-3 px-4 text-center">Tax Type</th>
@@ -586,7 +586,6 @@ export const InventorySuppliersView: React.FC<InventorySuppliersViewProps> = ({
                                 <Package className="w-4 h-4" />
                               </div>
                             )}
-                            <span className="font-bold text-indigo-600 text-xs">{item.sku}</span>
                           </div>
                         </td>
                         <td className="py-3 px-4 font-semibold text-slate-900">{item.name}</td>
@@ -818,29 +817,16 @@ export const InventorySuppliersView: React.FC<InventorySuppliersViewProps> = ({
 
             <form onSubmit={handleCreateProduct} className="mt-4 space-y-4">
               {/* Product Info */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-slate-700">SKU Code *</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. MEN-SHIRT-001"
-                    value={sku}
-                    onChange={(e) => setSku(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500 uppercase mt-1"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-700">Item Name *</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Formal White Linen Shirt"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 mt-1"
-                    required
-                  />
-                </div>
+              <div>
+                <label className="text-xs font-bold text-slate-700">Item Name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Formal White Linen Shirt"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 mt-1"
+                  required
+                />
               </div>
 
               {/* 3-LEVEL CASCADING HIERARCHY BOX */}

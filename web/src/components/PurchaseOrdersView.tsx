@@ -292,10 +292,10 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
       }
 
       // 2. Insert Line Items
-      const itemsToInsert = lineItems.map(item => ({
+      const itemsToInsert = lineItems.map((item, idx) => ({
         po_id: poData.id,
         inventory_item_id: item.inventory_item_id || null,
-        item_sku: item.item_sku,
+        item_sku: item.item_sku || `ITEM-${idx + 1}`,
         item_name: item.item_name,
         quantity_ordered: item.quantity_ordered,
         quantity_received: 0,
@@ -626,7 +626,6 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                     <thead className="bg-slate-50 border-b border-slate-200 font-bold text-slate-600">
                       <tr>
                         <th className="p-3 w-24">Dress Photo</th>
-                        <th className="p-3 w-28">SKU</th>
                         <th className="p-3 min-w-[220px]">Item Description &amp; Tax Flow *</th>
                         <th className="p-3 w-20">Qty *</th>
                         <th className="p-3 w-28">Unit Price (₹)</th>
@@ -717,14 +716,6 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                                   </button>
                                 </div>
                               )}
-                            </td>
-                            <td className="p-2">
-                              <input
-                                type="text"
-                                value={item.item_sku}
-                                onChange={(e) => updateLineItem(idx, { item_sku: e.target.value })}
-                                className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
-                              />
                             </td>
                             <td className="p-2 space-y-1">
                               <input
@@ -1118,7 +1109,7 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                   <thead className="bg-slate-100 font-bold text-slate-700">
                     <tr>
                       <th className="p-2.5 w-14 text-center">Photo</th>
-                      <th className="p-2.5">Item Name / SKU</th>
+                      <th className="p-2.5">Item Description</th>
                       <th className="p-2.5 text-center">Qty</th>
                       <th className="p-2.5 text-right">Unit Price</th>
                       <th className="p-2.5 text-center">GST %</th>
@@ -1151,7 +1142,6 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                             </td>
                             <td className="p-2.5">
                               <span className="font-semibold text-slate-900">{item.item_name}</span>
-                              <span className="block text-[11px] text-slate-500">{item.item_sku}</span>
                               <span className="inline-block mt-0.5 text-[10px] text-slate-400">
                                 CGST {halfRate}% + SGST {halfRate}%
                               </span>

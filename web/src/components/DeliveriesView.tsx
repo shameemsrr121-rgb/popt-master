@@ -202,7 +202,7 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
                   <thead className="bg-slate-50 font-bold text-slate-700 border-b border-slate-200">
                     <tr>
                       <th className="p-3 w-16 text-center">Dress Photo</th>
-                      <th className="p-3">SKU & Item Name</th>
+                      <th className="p-3">Item Description</th>
                       <th className="p-3 text-center">Ordered</th>
                       <th className="p-3 text-center">Received</th>
                       <th className="p-3 text-center">Status</th>
@@ -240,7 +240,6 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
                           </td>
                           <td className="p-3">
                             <span className="font-bold text-slate-900 block">{item.item_name}</span>
-                            <span className="text-[11px] text-slate-400">{item.item_sku}</span>
                           </td>
                           <td className="p-3 text-center font-bold text-slate-700">
                             {item.quantity_ordered}
