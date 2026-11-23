@@ -1,0 +1,6 @@
+{
+  "name": "POPT",
+  "description": "Fast, Simple Purchase Order (PO) Order, Planner & Tracker.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

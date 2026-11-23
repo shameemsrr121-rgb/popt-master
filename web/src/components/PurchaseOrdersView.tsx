@@ -1,0 +1,1043 @@
+import React, { useState } from 'react';
+import { 
+  Plus, 
+  Search, 
+  Printer, 
+  Trash2, 
+  Eye, 
+  Upload, 
+  FileText, 
+  X, 
+  Check, 
+  AlertCircle,
+  Calendar,
+  Building,
+  Image as ImageIcon
+} from 'lucide-react';
+import { PurchaseOrder, PurchaseOrderItem, Supplier, Location, InventoryItem, CompanyProfile, User, TaxRule } from '../types';
+import { supabase, uploadPoAttachment } from '../lib/supabase';
+import { calculateTaxRate, getTaxFlowBadge } from '../lib/taxMaster';
+
+interface PurchaseOrdersViewProps {
+  orders: PurchaseOrder[];
+  suppliers: Supplier[];
+  locations: Location[];
+  inventory: InventoryItem[];
+  taxRules?: TaxRule[];
+  companyProfile: CompanyProfile | null;
+  currentUser: User | null;
+  onRefresh: () => void;
+  selectedPOForView: PurchaseOrder | null;
+  setSelectedPOForView: (po: PurchaseOrder | null) => void;
+  isCreateOpen: boolean;
+  setIsCreateOpen: (open: boolean) => void;
+}
+
+export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
+  orders,
+  suppliers,
+  locations,
+  inventory,
+  taxRules = [],
+  companyProfile,
+  currentUser,
+  onRefresh,
+  selectedPOForView,
+  setSelectedPOForView,
+  isCreateOpen,
+  setIsCreateOpen
+}) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+
+  // Form states for Create PO
+  const [supplierId, setSupplierId] = useState<number>(suppliers[0]?.id || 0);
+  const [deliveryDate, setDeliveryDate] = useState(
+    new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
+  );
+  const [paymentTerms, setPaymentTerms] = useState('Net 30');
+  const [locationName, setLocationName] = useState('Central Warehouse');
+  const [notes, setNotes] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Line items for Create PO
+  const [lineItems, setLineItems] = useState<Array<PurchaseOrderItem>>([
+    {
+      item_sku: 'ITEM-001',
+      item_name: 'Cotton Fabric Roll',
+      quantity_ordered: 10,
+      quantity_received: 0,
+      unit_price: 150.0,
+      tax_percent: 5.0,
+      taxable_amount: 1500.0,
+      tax_amount: 75.0,
+      total_price: 1575.0,
+      location: 'Central Warehouse',
+      division: 'Readymade',
+      section: 'Main Store',
+      department: 'General',
+      c1_brand: '',
+      c2_size: '',
+      c3_design: '',
+      c4_colour: ''
+    }
+  ]);
+
+  const addLineItem = () => {
+    setLineItems([
+      ...lineItems,
+      {
+        item_sku: `ITEM-${String(lineItems.length + 1).padStart(3, '0')}`,
+        item_name: '',
+        quantity_ordered: 1,
+        quantity_received: 0,
+        unit_price: 0,
+        tax_percent: 5.0,
+        taxable_amount: 0,
+        tax_amount: 0,
+        total_price: 0,
+        location: locationName
+      }
+    ]);
+  };
+
+  const [customTaxOverrides, setCustomTaxOverrides] = useState<Record<number, boolean>>({});
+
+  const updateLineItem = (index: number, updates: Partial<PurchaseOrderItem>, isManualTaxChange = false) => {
+    const updated = [...lineItems];
+    const current = { ...updated[index], ...updates };
+
+    if (isManualTaxChange) {
+      setCustomTaxOverrides((prev) => ({ ...prev, [index]: true }));
+    } else if (!customTaxOverrides[index]) {
+      // Automatic tax calculation on description or price change
+      const calcResult = calculateTaxRate({
+        itemName: current.item_name,
+        category: current.division,
+        division: current.division,
+        department: current.department,
+        section: current.section,
+        unitCost: Number(current.unit_price) || 0,
+        customRules: taxRules
+      });
+      current.tax_percent = calcResult.rate;
+    }
+
+    const qty = Number(current.quantity_ordered) || 0;
+    const price = Number(current.unit_price) || 0;
+    const taxRate = Number(current.tax_percent) || 0;
+
+    const taxable = qty * price;
+    const tax = taxable * (taxRate / 100);
+    const total = taxable + tax;
+
+    current.taxable_amount = taxable;
+    current.tax_amount = tax;
+    current.total_price = total;
+
+    updated[index] = current;
+    setLineItems(updated);
+  };
+
+  const handleSelectInventoryItem = (index: number, invItem: InventoryItem) => {
+    const unitPrice = invItem.unit_cost || 0;
+    const calcResult = calculateTaxRate({
+      itemName: invItem.name,
+      category: invItem.category || invItem.division,
+      division: invItem.division,
+      department: invItem.department,
+      section: invItem.section,
+      unitCost: unitPrice,
+      customRules: taxRules
+    });
+
+    setCustomTaxOverrides((prev) => ({ ...prev, [index]: false }));
+
+    updateLineItem(index, {
+      inventory_item_id: invItem.id,
+      item_sku: invItem.sku || `ITEM-${String(index + 1).padStart(3, '0')}`,
+      item_name: invItem.name,
+      unit_price: unitPrice,
+      tax_percent: calcResult.rate,
+      division: invItem.division || 'Readymade',
+      section: invItem.section || '',
+      department: invItem.department || '',
+      c1_brand: invItem.category1 || '',
+      c2_size: invItem.category5 || '',
+      c3_design: invItem.category4 || '',
+      c4_colour: invItem.category6 || ''
+    });
+  };
+
+  const removeLineItem = (index: number) => {
+    if (lineItems.length > 1) {
+      setLineItems(lineItems.filter((_, i) => i !== index));
+      setCustomTaxOverrides((prev) => {
+        const next = { ...prev };
+        delete next[index];
+        return next;
+      });
+    }
+  };
+
+  const calculateSubtotal = () => lineItems.reduce((sum, item) => sum + item.taxable_amount, 0);
+  const calculateTotalTax = () => lineItems.reduce((sum, item) => sum + item.tax_amount, 0);
+  const calculateGrandTotal = () => lineItems.reduce((sum, item) => sum + item.total_price, 0);
+
+  const handleCreatePO = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supplierId) {
+      alert('Please select a supplier');
+      return;
+    }
+    if (lineItems.some(item => !item.item_name || item.quantity_ordered <= 0)) {
+      alert('Please fill out all line item details with valid quantities');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      let uploadedPhotoUrl: string | null = null;
+      if (selectedFile) {
+        uploadedPhotoUrl = await uploadPoAttachment(selectedFile, 'po');
+      }
+
+      const selectedSupplier = suppliers.find(s => s.id === Number(supplierId));
+      const supplierName = selectedSupplier?.name || 'Selected Vendor';
+
+      const poNumber = `PO-${Date.now().toString().slice(-6)}`;
+      const orderDateMillis = Date.now();
+      const expectedDeliveryMillis = new Date(deliveryDate).getTime();
+
+      const subtotal = calculateSubtotal();
+      const totalTax = calculateTotalTax();
+      const grandTotal = calculateGrandTotal();
+
+      // 1. Insert Purchase Order
+      const { data: poData, error: poError } = await supabase
+        .from('purchase_orders')
+        .insert({
+          po_number: poNumber,
+          supplier_id: Number(supplierId),
+          supplier_name: supplierName,
+          order_date_millis: orderDateMillis,
+          expected_delivery_date_millis: expectedDeliveryMillis,
+          payment_terms: paymentTerms,
+          status: 'ISSUED',
+          subtotal: subtotal,
+          tax_amount: totalTax,
+          total_amount: grandTotal,
+          notes: notes,
+          photo_uri: uploadedPhotoUrl,
+          location: locationName,
+          created_by: currentUser?.full_name || currentUser?.username || 'Web Portal'
+        })
+        .select()
+        .single();
+
+      if (poError || !poData) {
+        throw new Error(poError?.message || 'Failed to insert purchase order');
+      }
+
+      // 2. Insert Line Items
+      const itemsToInsert = lineItems.map(item => ({
+        po_id: poData.id,
+        item_sku: item.item_sku,
+        item_name: item.item_name,
+        quantity_ordered: item.quantity_ordered,
+        quantity_received: 0,
+        unit_price: item.unit_price,
+        tax_percent: item.tax_percent,
+        taxable_amount: item.taxable_amount,
+        tax_amount: item.tax_amount,
+        total_price: item.total_price,
+        location: item.location || locationName,
+        division: item.division || 'Readymade',
+        section: item.section || 'Main Store',
+        department: item.department || 'General',
+        c1_brand: item.c1_brand || '',
+        c2_size: item.c2_size || '',
+        c3_design: item.c3_design || '',
+        c4_colour: item.c4_colour || ''
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('po_items')
+        .insert(itemsToInsert);
+
+      if (itemsError) {
+        console.error('Error inserting PO items:', itemsError);
+      }
+
+      // 3. Insert Tax Breakdowns
+      const taxSlabs: { [rate: number]: { taxable: number; tax: number } } = {};
+      lineItems.forEach(item => {
+        const rate = item.tax_percent;
+        if (!taxSlabs[rate]) {
+          taxSlabs[rate] = { taxable: 0, tax: 0 };
+        }
+        taxSlabs[rate].taxable += item.taxable_amount;
+        taxSlabs[rate].tax += item.tax_amount;
+      });
+
+      const taxRows = Object.entries(taxSlabs).map(([rateStr, val]) => {
+        const rate = Number(rateStr);
+        const halfRate = rate / 2;
+        const halfTax = val.tax / 2;
+        return {
+          po_id: poData.id,
+          gst_percent: rate,
+          taxable_amount: val.taxable,
+          cgst_percent: halfRate,
+          cgst_amount: halfTax,
+          sgst_percent: halfRate,
+          sgst_amount: halfTax,
+          total_tax_amount: val.tax
+        };
+      });
+
+      if (taxRows.length > 0) {
+        await supabase.from('po_tax_breakdowns').insert(taxRows);
+      }
+
+      setIsCreateOpen(false);
+      onRefresh();
+    } catch (err: any) {
+      alert(`Error creating PO: ${err.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeletePO = async (poId: number) => {
+    if (!currentUser?.can_delete_po && !currentUser?.is_admin) {
+      alert('You do not have permission to delete purchase orders.');
+      return;
+    }
+    if (confirm('Are you sure you want to delete this purchase order?')) {
+      await supabase.from('purchase_orders').delete().eq('id', poId);
+      if (selectedPOForView?.id === poId) {
+        setSelectedPOForView(null);
+      }
+      onRefresh();
+    }
+  };
+
+  // Filtered orders
+  const filteredOrders = orders.filter(po => {
+    const matchesSearch = po.po_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      po.supplier_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (po.notes && po.notes.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    const matchesStatus = statusFilter === 'ALL' || po.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Header & Search */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Purchase Orders</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Manage, approve, print, and track all supplier purchase orders
+          </p>
+        </div>
+        <button
+          onClick={() => setIsCreateOpen(true)}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-sm shadow-indigo-600/30 transition-all hover:scale-[1.02]"
+        >
+          <Plus className="w-4 h-4" />
+          Create New Purchase Order
+        </button>
+      </div>
+
+      {/* Filter Tabs & Search Bar */}
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+        {/* Status Pills */}
+        <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1">
+          {['ALL', 'ISSUED', 'PARTIALLY_RECEIVED', 'RECEIVED', 'DRAFT', 'CANCELLED'].map(status => (
+            <button
+              key={status}
+              onClick={() => setStatusFilter(status)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                statusFilter === status
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
+              }`}
+            >
+              {status === 'ALL' ? 'All Orders' : status.replace('_', ' ')}
+            </button>
+          ))}
+        </div>
+
+        {/* Search Input */}
+        <div className="relative w-full md:w-72">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search PO#, supplier, notes..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+          />
+        </div>
+      </div>
+
+      {/* Orders Table */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+        {filteredOrders.length === 0 ? (
+          <div className="py-16 text-center text-slate-400">
+            <FileText className="w-12 h-12 mx-auto text-slate-300 mb-3" />
+            <p className="text-base font-semibold text-slate-700">No purchase orders found</p>
+            <p className="text-xs text-slate-400 mt-1">Try clearing your filters or create a new order</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase font-bold text-slate-500">
+                <tr>
+                  <th className="py-3.5 px-4">PO Number</th>
+                  <th className="py-3.5 px-4">Supplier</th>
+                  <th className="py-3.5 px-4">Order Date</th>
+                  <th className="py-3.5 px-4">Expected Delivery</th>
+                  <th className="py-3.5 px-4">Status</th>
+                  <th className="py-3.5 px-4 text-right">Tax</th>
+                  <th className="py-3.5 px-4 text-right">Total Amount</th>
+                  <th className="py-3.5 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredOrders.map(order => {
+                  const orderDate = new Date(Number(order.order_date_millis)).toLocaleDateString('en-IN');
+                  const deliveryDate = new Date(Number(order.expected_delivery_date_millis)).toLocaleDateString('en-IN');
+
+                  return (
+                    <tr key={order.id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="py-3.5 px-4 font-bold text-indigo-600">
+                        {order.po_number}
+                      </td>
+                      <td className="py-3.5 px-4 font-medium text-slate-800">
+                        {order.supplier_name}
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-500 text-xs">
+                        {orderDate}
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-500 text-xs">
+                        {deliveryDate}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          order.status === 'ISSUED'
+                            ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                            : order.status === 'PARTIALLY_RECEIVED'
+                            ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                            : order.status === 'RECEIVED'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : 'bg-slate-100 text-slate-700'
+                        }`}>
+                          {order.status.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-right text-slate-500 text-xs">
+                        ₹{Number(order.tax_amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-extrabold text-slate-900">
+                        ₹{Number(order.total_amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => setSelectedPOForView(order)}
+                            title="View / Print PO"
+                            className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          {(currentUser?.is_admin || currentUser?.can_delete_po) && (
+                            <button
+                              onClick={() => handleDeletePO(order.id)}
+                              title="Delete PO"
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* CREATE PURCHASE ORDER MODAL */}
+      {isCreateOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-4xl w-full p-6 shadow-2xl border border-slate-100 my-8">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">Create New Purchase Order</h2>
+                <p className="text-xs text-slate-500">Draft PO and line items will instantly sync with Supabase and Mobile App</p>
+              </div>
+              <button
+                onClick={() => setIsCreateOpen(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-xl"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreatePO} className="mt-5 space-y-6">
+              {/* Top metadata fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                {/* Supplier */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Supplier / Vendor *</label>
+                  <select
+                    value={supplierId}
+                    onChange={(e) => setSupplierId(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    required
+                  >
+                    <option value="">Select Supplier</option>
+                    {suppliers.map(s => (
+                      <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Delivery Date */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Expected Delivery *</label>
+                  <input
+                    type="date"
+                    value={deliveryDate}
+                    onChange={(e) => setDeliveryDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    required
+                  />
+                </div>
+
+                {/* Payment Terms */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Payment Terms</label>
+                  <select
+                    value={paymentTerms}
+                    onChange={(e) => setPaymentTerms(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="Net 30">Net 30 Days</option>
+                    <option value="Net 60">Net 60 Days</option>
+                    <option value="COD">Cash on Delivery (COD)</option>
+                    <option value="Advance">100% Advance</option>
+                  </select>
+                </div>
+
+                {/* Target Location */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Receiving Warehouse</label>
+                  <select
+                    value={locationName}
+                    onChange={(e) => setLocationName(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    {locations.map(loc => (
+                      <option key={loc.id} value={loc.name}>{loc.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Line Items Editor */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-slate-800">Order Items</h3>
+                  <button
+                    type="button"
+                    onClick={addLineItem}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-xs font-semibold"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add Item
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-200 font-bold text-slate-600">
+                      <tr>
+                        <th className="p-3 w-28">SKU</th>
+                        <th className="p-3 min-w-[220px]">Item Description &amp; Tax Flow *</th>
+                        <th className="p-3 w-20">Qty *</th>
+                        <th className="p-3 w-28">Unit Price (₹)</th>
+                        <th className="p-3 w-24">GST %</th>
+                        <th className="p-3 text-right">Taxable</th>
+                        <th className="p-3 text-right">Total (₹)</th>
+                        <th className="p-3 w-10"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {lineItems.map((item, idx) => {
+                        const taxBadgeInfo = getTaxFlowBadge({
+                          itemName: item.item_name,
+                          category: item.division,
+                          division: item.division,
+                          department: item.department,
+                          section: item.section,
+                          unitCost: Number(item.unit_price) || 0,
+                          customRules: taxRules
+                        });
+                        const isOverridden = !!customTaxOverrides[idx];
+
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50/50 align-top">
+                            <td className="p-2">
+                              <input
+                                type="text"
+                                value={item.item_sku}
+                                onChange={(e) => updateLineItem(idx, { item_sku: e.target.value })}
+                                className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                              />
+                            </td>
+                            <td className="p-2 space-y-1">
+                              <input
+                                type="text"
+                                placeholder="e.g. Silk Saree, Cotton Shirt, Linen..."
+                                value={item.item_name}
+                                onChange={(e) => updateLineItem(idx, { item_name: e.target.value })}
+                                className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium focus:ring-1 focus:ring-indigo-500"
+                                required
+                              />
+
+                              {/* Inventory Quick Match if available */}
+                              {inventory.length > 0 && !item.inventory_item_id && item.item_name.length >= 2 && (
+                                <div className="flex flex-wrap gap-1 pt-0.5">
+                                  {inventory
+                                    .filter(inv => inv.name.toLowerCase().includes(item.item_name.toLowerCase()))
+                                    .slice(0, 3)
+                                    .map(inv => (
+                                      <button
+                                        type="button"
+                                        key={inv.id}
+                                        onClick={() => handleSelectInventoryItem(idx, inv)}
+                                        className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors"
+                                      >
+                                        Use: {inv.name} (₹{inv.unit_cost})
+                                      </button>
+                                    ))}
+                                </div>
+                              )}
+
+                              {/* Statutory Tax Flow Badge */}
+                              <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                {isOverridden ? (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                    ⚙️ Manual {item.tax_percent}% GST (Overridden)
+                                  </span>
+                                ) : (
+                                  <span
+                                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border shadow-xs transition-colors ${
+                                      taxBadgeInfo.isTextile
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                                        : taxBadgeInfo.isHighSlab
+                                        ? 'bg-rose-50 text-rose-700 border-rose-300'
+                                        : 'bg-blue-50 text-blue-700 border-blue-300'
+                                    }`}
+                                  >
+                                    🏷️ {taxBadgeInfo.badge}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-2">
+                              <input
+                                type="number"
+                                min="1"
+                                value={item.quantity_ordered}
+                                onChange={(e) => updateLineItem(idx, { quantity_ordered: Number(e.target.value) })}
+                                className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                                required
+                              />
+                            </td>
+                            <td className="p-2">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={item.unit_price}
+                                onChange={(e) => updateLineItem(idx, { unit_price: Number(e.target.value) })}
+                                className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                                required
+                              />
+                            </td>
+                            <td className="p-2">
+                              <div className="space-y-1">
+                                <select
+                                  value={item.tax_percent}
+                                  onChange={(e) => updateLineItem(idx, { tax_percent: Number(e.target.value) }, true)}
+                                  className={`w-full px-1.5 py-1.5 bg-white border rounded-lg text-xs font-bold ${
+                                    isOverridden ? 'border-amber-400 text-amber-900 bg-amber-50/30' : 'border-slate-200 text-slate-800'
+                                  }`}
+                                >
+                                  <option value="0">0% GST</option>
+                                  <option value="5">5% GST</option>
+                                  <option value="12">12% GST</option>
+                                  <option value="18">18% GST</option>
+                                  <option value="28">28% GST</option>
+                                </select>
+                                {isOverridden && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setCustomTaxOverrides(prev => {
+                                        const next = { ...prev };
+                                        delete next[idx];
+                                        return next;
+                                      });
+                                      updateLineItem(idx, {});
+                                    }}
+                                    className="text-[9px] text-indigo-600 hover:underline block"
+                                  >
+                                    Reset to Auto
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-2 text-right font-medium text-slate-600 pt-3">
+                              ₹{item.taxable_amount.toFixed(2)}
+                            </td>
+                            <td className="p-2 text-right font-bold text-slate-900 pt-3">
+                              ₹{item.total_price.toFixed(2)}
+                            </td>
+                            <td className="p-2 text-center pt-3">
+                              {lineItems.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeLineItem(idx)}
+                                  className="text-slate-400 hover:text-rose-500"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Bottom: Notes & Attachment & Total Summary */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">PO Notes / Special Instructions</label>
+                    <textarea
+                      rows={3}
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder="Add terms, packaging instructions, transport details..."
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Attach Reference Photo / Proforma (Cloud Storage)
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*,.pdf"
+                      onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                      className="block w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                    />
+                  </div>
+                </div>
+
+                {/* Calculation Summary Box */}
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-2.5">
+                  <div className="flex justify-between text-xs text-slate-600">
+                    <span>Taxable Subtotal:</span>
+                    <span className="font-semibold">₹{calculateSubtotal().toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+
+                  {/* Slabs breakdown */}
+                  {(() => {
+                    const taxSlabs: { [rate: number]: { taxable: number; tax: number } } = {};
+                    lineItems.forEach(item => {
+                      const rate = item.tax_percent;
+                      if (!taxSlabs[rate]) taxSlabs[rate] = { taxable: 0, tax: 0 };
+                      taxSlabs[rate].taxable += item.taxable_amount;
+                      taxSlabs[rate].tax += item.tax_amount;
+                    });
+                    const slabs = Object.entries(taxSlabs);
+
+                    return (
+                      <div className="py-2 px-2.5 bg-white/80 rounded-xl border border-slate-200/60 space-y-1.5">
+                        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+                          Tax Flow (CGST + SGST Breakdown)
+                        </div>
+                        {slabs.map(([rateStr, val]) => {
+                          const rate = Number(rateStr);
+                          const halfRate = rate / 2;
+                          const halfTax = val.tax / 2;
+                          return (
+                            <div key={rateStr} className="text-[11px] text-slate-600 space-y-0.5">
+                              <div className="flex justify-between font-medium">
+                                <span>GST {rate}% (on ₹{val.taxable.toFixed(2)}):</span>
+                                <span className="font-bold text-slate-800">₹{val.tax.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between text-[10px] text-slate-400 pl-2">
+                                <span>• CGST ({halfRate}%): ₹{halfTax.toFixed(2)}</span>
+                                <span>• SGST ({halfRate}%): ₹{halfTax.toFixed(2)}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+
+                  <div className="flex justify-between text-xs text-slate-600">
+                    <span>Total GST Amount:</span>
+                    <span className="font-bold text-indigo-600">₹{calculateTotalTax().toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="pt-2 border-t border-slate-200 flex justify-between text-base font-extrabold text-slate-900">
+                    <span>Grand Total:</span>
+                    <span>₹{calculateGrandTotal().toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateOpen(false)}
+                  className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-md shadow-indigo-600/30 transition-all disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Issuing Order...' : 'Issue Purchase Order'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* PO DETAIL & PRINT MODAL */}
+      {selectedPOForView && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-3xl w-full p-8 shadow-2xl border border-slate-100 my-8">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 no-print">
+              <span className="text-sm font-bold text-slate-400">PURCHASE ORDER INVOICE</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Print / Save PDF
+                </button>
+                <button
+                  onClick={() => setSelectedPOForView(null)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Content */}
+            <div className="mt-6 space-y-6">
+              {/* Header */}
+              <div className="flex items-start justify-between border-b pb-6">
+                <div>
+                  <h1 className="text-2xl font-black text-slate-900">{companyProfile?.company_name || 'PO Master'}</h1>
+                  <p className="text-xs text-slate-500 mt-1">{companyProfile?.address}</p>
+                  <p className="text-xs text-slate-500">{companyProfile?.phone} • {companyProfile?.email}</p>
+                  {companyProfile?.gst_number && (
+                    <p className="text-xs font-bold text-indigo-600 mt-1">GSTIN: {companyProfile.gst_number}</p>
+                  )}
+                </div>
+                <div className="text-right">
+                  <div className="text-xl font-black text-indigo-600">{selectedPOForView.po_number}</div>
+                  <div className="text-xs text-slate-500 mt-1">
+                    Date: {new Date(Number(selectedPOForView.order_date_millis)).toLocaleDateString('en-IN')}
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    Expected: {new Date(Number(selectedPOForView.expected_delivery_date_millis)).toLocaleDateString('en-IN')}
+                  </div>
+                  <div className="mt-2">
+                    <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-slate-100 text-slate-800 border">
+                      {selectedPOForView.status}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Vendor & Delivery Box */}
+              <div className="grid grid-cols-2 gap-6 bg-slate-50 p-4 rounded-xl text-xs">
+                <div>
+                  <div className="font-bold text-slate-400 uppercase tracking-wider mb-1">Vendor / Supplier:</div>
+                  <div className="text-sm font-bold text-slate-900">{selectedPOForView.supplier_name}</div>
+                  <div className="text-slate-600 mt-0.5">Payment Terms: {selectedPOForView.payment_terms}</div>
+                </div>
+                <div>
+                  <div className="font-bold text-slate-400 uppercase tracking-wider mb-1">Deliver To:</div>
+                  <div className="text-sm font-bold text-slate-900">{selectedPOForView.location}</div>
+                  <div className="text-slate-600 mt-0.5">Created By: {selectedPOForView.created_by}</div>
+                </div>
+              </div>
+
+              {/* Photo Preview if uploaded */}
+              {selectedPOForView.photo_uri && (
+                <div className="p-3 border rounded-xl bg-slate-50/50">
+                  <div className="text-xs font-bold text-slate-500 mb-2 flex items-center gap-1">
+                    <ImageIcon className="w-3.5 h-3.5" /> Sample Attachment
+                  </div>
+                  <img
+                    src={selectedPOForView.photo_uri}
+                    alt="PO Attachment"
+                    className="max-h-48 rounded-lg object-contain border"
+                  />
+                </div>
+              )}
+
+              {/* Items Table */}
+              <div>
+                <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden">
+                  <thead className="bg-slate-100 font-bold text-slate-700">
+                    <tr>
+                      <th className="p-2.5">Item Name / SKU</th>
+                      <th className="p-2.5 text-center">Qty</th>
+                      <th className="p-2.5 text-right">Unit Price</th>
+                      <th className="p-2.5 text-center">GST %</th>
+                      <th className="p-2.5 text-right">Taxable</th>
+                      <th className="p-2.5 text-right">GST (₹)</th>
+                      <th className="p-2.5 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {selectedPOForView.items && selectedPOForView.items.length > 0 ? (
+                      selectedPOForView.items.map((item, idx) => {
+                        const taxRate = Number(item.tax_percent) || 0;
+                        const halfRate = taxRate / 2;
+                        return (
+                          <tr key={idx}>
+                            <td className="p-2.5">
+                              <span className="font-semibold text-slate-900">{item.item_name}</span>
+                              <span className="block text-[11px] text-slate-500">{item.item_sku}</span>
+                              <span className="inline-block mt-0.5 text-[10px] text-slate-400">
+                                CGST {halfRate}% + SGST {halfRate}%
+                              </span>
+                            </td>
+                            <td className="p-2.5 text-center font-bold">{item.quantity_ordered}</td>
+                            <td className="p-2.5 text-right">₹{Number(item.unit_price).toFixed(2)}</td>
+                            <td className="p-2.5 text-center font-semibold text-indigo-700">{taxRate}%</td>
+                            <td className="p-2.5 text-right text-slate-600">₹{Number(item.taxable_amount || 0).toFixed(2)}</td>
+                            <td className="p-2.5 text-right text-indigo-600">₹{Number(item.tax_amount || 0).toFixed(2)}</td>
+                            <td className="p-2.5 text-right font-bold">₹{Number(item.total_price).toFixed(2)}</td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td className="p-2.5 font-medium">Standard Purchase Order Items</td>
+                        <td className="p-2.5 text-center font-bold">1</td>
+                        <td className="p-2.5 text-right">₹{Number(selectedPOForView.subtotal).toFixed(2)}</td>
+                        <td className="p-2.5 text-center font-semibold">5%</td>
+                        <td className="p-2.5 text-right">₹{Number(selectedPOForView.subtotal).toFixed(2)}</td>
+                        <td className="p-2.5 text-right text-indigo-600">₹{Number(selectedPOForView.tax_amount || 0).toFixed(2)}</td>
+                        <td className="p-2.5 text-right font-bold">₹{Number(selectedPOForView.total_amount).toFixed(2)}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Total Summary with Tax Flow Breakdown */}
+              <div className="flex justify-end pt-2">
+                <div className="w-80 space-y-2 text-xs">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Taxable Subtotal:</span>
+                    <span>₹{Number(selectedPOForView.subtotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+
+                  {/* Statutory Tax Flow Breakdown in Printable view */}
+                  {(() => {
+                    const items = selectedPOForView.items || [];
+                    const taxSlabs: { [rate: number]: { taxable: number; tax: number } } = {};
+                    if (items.length > 0) {
+                      items.forEach(it => {
+                        const r = Number(it.tax_percent) || 0;
+                        if (!taxSlabs[r]) taxSlabs[r] = { taxable: 0, tax: 0 };
+                        taxSlabs[r].taxable += Number(it.taxable_amount) || 0;
+                        taxSlabs[r].tax += Number(it.tax_amount) || 0;
+                      });
+                    } else if (selectedPOForView.tax_amount) {
+                      taxSlabs[5] = { taxable: Number(selectedPOForView.subtotal || 0), tax: Number(selectedPOForView.tax_amount) };
+                    }
+                    const slabs = Object.entries(taxSlabs);
+
+                    return (
+                      <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/70 space-y-1.5 text-[11px]">
+                        <div className="font-bold text-slate-700 uppercase tracking-wider text-[10px]">
+                          Statutory Tax Breakdown:
+                        </div>
+                        {slabs.map(([rateStr, val]) => {
+                          const rate = Number(rateStr);
+                          const halfRate = rate / 2;
+                          const halfTax = val.tax / 2;
+                          return (
+                            <div key={rateStr} className="space-y-0.5 text-slate-600">
+                              <div className="flex justify-between font-medium">
+                                <span>GST {rate}% (Taxable: ₹{val.taxable.toFixed(2)}):</span>
+                                <span className="font-bold text-slate-900">₹{val.tax.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between text-[10px] text-slate-500 pl-2">
+                                <span>• CGST ({halfRate}%): ₹{halfTax.toFixed(2)}</span>
+                                <span>• SGST ({halfRate}%): ₹{halfTax.toFixed(2)}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+
+                  <div className="flex justify-between text-slate-700 font-semibold">
+                    <span>Total GST Tax Amount:</span>
+                    <span className="text-indigo-600">₹{Number(selectedPOForView.tax_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between text-sm font-extrabold text-slate-900 border-t pt-2">
+                    <span>Grand Total:</span>
+                    <span>₹{Number(selectedPOForView.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes */}
+              {selectedPOForView.notes && (
+                <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-lg border">
+                  <span className="font-bold text-slate-700 block mb-1">Notes / Instructions:</span>
+                  {selectedPOForView.notes}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

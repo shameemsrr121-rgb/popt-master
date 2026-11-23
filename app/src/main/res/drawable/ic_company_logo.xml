@@ -1,0 +1,82 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="240dp"
+    android:height="240dp"
+    android:viewportWidth="240"
+    android:viewportHeight="240">
+    
+    <!-- White Background Card with soft border -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,0 L228,0 A12,12 0 0,1 240,12 L240,228 A12,12 0 0,1 228,240 L12,240 A12,12 0 0,1 0,228 L0,12 A12,12 0 0,1 12,0 Z" />
+
+    <!-- Top Badge - 40 Badge Icon (Red/Gold) -->
+    <path
+        android:fillColor="#E52320"
+        android:pathData="M25,22 L35,22 L35,38 L40,38 L40,22 L45,22 L45,45 L40,45 L40,42 L25,42 Z" />
+    <path
+        android:fillColor="#00A651"
+        android:pathData="M22,46 C30,46 45,42 55,46 C45,50 30,48 22,46 Z" />
+
+    <!-- Main "GARDEN" Stylized Text Graphic (In Brand Red #E52320) -->
+    <!-- Large G -->
+    <path
+        android:fillColor="#E52320"
+        android:pathData="M22,65 C45,52 68,62 68,90 C68,125 32,130 22,100 C18,85 22,75 32,72 L32,82 C28,84 26,90 28,98 C32,112 56,110 56,90 C56,76 42,70 28,78 Z M45,92 L64,92 L64,102 L45,102 Z" />
+    <!-- A -->
+    <path
+        android:fillColor="#E52320"
+        android:pathData="M70,122 L82,65 L96,65 L108,122 L96,122 L93,105 L84,105 L81,122 Z M86,94 L92,94 L89,76 Z" />
+    <!-- R -->
+    <path
+        android:fillColor="#E52320"
+        android:pathData="M112,65 L132,65 C142,65 146,72 146,82 C146,92 138,96 130,98 L144,122 L132,122 L120,100 L120,122 L112,122 Z M120,74 L120,92 L130,92 C135,92 138,89 138,83 C138,77 135,74 130,74 Z" />
+    <!-- D -->
+    <path
+        android:fillColor="#E52320"
+        android:pathData="M150,65 L168,65 C184,65 188,78 188,93 C188,108 184,122 168,122 L150,122 Z M158,74 L158,113 L166,113 C176,113 178,104 178,93 C178,82 176,74 166,74 Z" />
+    <!-- E -->
+    <path
+        android:fillColor="#E52320"
+        android:pathData="M192,65 L218,65 L218,74 L200,74 L200,88 L214,88 L214,97 L200,97 L200,113 L218,113 L218,122 L192,122 Z" />
+
+    <!-- "AYISHA" Green Banner Pill Box -->
+    <path
+        android:fillColor="#00A651"
+        android:pathData="M68,128 L218,128 A12,12 0 0,1 230,140 L230,154 A12,12 0 0,1 218,166 L68,166 A12,12 0 0,1 56,154 L56,140 A12,12 0 0,1 68,128 Z" />
+    
+    <!-- AYISHA White Text inside Green Pill -->
+    <!-- A -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M72,160 L80,134 L88,134 L96,160 L88,160 L86,152 L82,152 L80,160 Z M83,146 L85,146 L84,139 Z" />
+    <!-- Y -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M98,134 L106,146 L106,160 L113,160 L113,146 L121,134 L113,134 L109,142 L105,134 Z" />
+    <!-- I -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M125,134 L132,134 L132,160 L125,160 Z" />
+    <!-- S -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M136,154 C136,158 140,161 146,161 C152,161 155,158 155,153 C155,146 137,148 137,140 C137,135 141,133 146,133 C152,133 155,136 156,140 L149,140 C149,138 147,137 145,137 C143,137 142,138 142,140 C142,144 160,142 160,153 C160,159 154,162 146,162 C137,162 135,157 135,154 Z" />
+    <!-- H -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M162,134 L169,134 L169,144 L177,144 L177,134 L184,134 L184,160 L177,160 L177,150 L169,150 L169,160 L162,160 Z" />
+    <!-- A -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M188,160 L196,134 L204,134 L212,160 L204,160 L202,152 L198,152 L196,160 Z M199,146 L201,146 L200,139 Z" />
+
+    <!-- Subtitle: "TEXTILES & READYMADES" in Navy/Indigo (#2B266D) -->
+    <path
+        android:fillColor="#2B266D"
+        android:pathData="M35,174 L205,174 L205,190 L35,190 Z" />
+    
+    <!-- Footer Locations: PURASAWALKAM | T.NAGAR | AVADI -->
+    <path
+        android:fillColor="#E52320"
+        android:pathData="M20,198 L220,198 L220,222 L20,222 Z" />
+</vector>
