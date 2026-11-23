@@ -3,48 +3,78 @@ import { supabase } from './supabase';
 
 const HIERARCHY_STORAGE_KEY = 'popt_store_hierarchy';
 
-export const DEFAULT_STORE_HIERARCHY: StoreHierarchyItem[] = [
-  { id: 'seed-1', division: 'Men', section: 'Formals', department: 'Shirts', type: 'Readymade' },
-  { id: 'seed-2', division: 'Men', section: 'Formals', department: 'Trousers', type: 'Readymade' },
-  { id: 'seed-3', division: 'Men', section: 'Formals', department: 'Blazers', type: 'Readymade' },
-  { id: 'seed-4', division: 'Men', section: 'Casuals', department: 'T-Shirts', type: 'Readymade' },
-  { id: 'seed-5', division: 'Men', section: 'Traditional', department: 'Kurtas & Dhotis', type: 'Textile' },
-  { id: 'seed-6', division: 'Women', section: 'Ethnic Wear', department: 'Sarees', type: 'Textile' },
-  { id: 'seed-7', division: 'Women', section: 'Ethnic Wear', department: 'Salwar Kameez', type: 'Readymade' },
-  { id: 'seed-8', division: 'Women', section: 'Western', department: 'Kurtis', type: 'Readymade' },
-  { id: 'seed-9', division: 'Fabrics', section: 'Cotton', department: 'Shirting Fabric', type: 'Textile' },
-  { id: 'seed-10', division: 'Fabrics', section: 'Silk', department: 'Pure Silk Material', type: 'Textile' },
-  { id: 'seed-11', division: 'Kids', section: 'Boys', department: 'Sets & Rompers', type: 'Readymade' },
-  { id: 'seed-12', division: 'Kids', section: 'Girls', department: 'Frocks & Dresses', type: 'Readymade' },
-];
+/**
+ * Empty default hierarchy: Users configure their own hierarchy from scratch.
+ * NO HARDCODED OR SEED DIVISIONS/SECTIONS/DEPARTMENTS!
+ */
+export const DEFAULT_STORE_HIERARCHY: StoreHierarchyItem[] = [];
+
+/**
+ * Clean legacy seed entries from localStorage if present
+ */
+function cleanLegacySeeds(items: StoreHierarchyItem[]): StoreHierarchyItem[] {
+  return items.filter(item => {
+    if (!item) return false;
+    // Filter out seed ids or default seeds
+    if (item.id && item.id.startsWith('seed-')) return false;
+    const div = (item.division || '').trim().toLowerCase();
+    const sec = (item.section || '').trim().toLowerCase();
+    const dept = (item.department || '').trim().toLowerCase();
+    // Also remove default seeds if they match the old hardcoded list
+    const legacySeedCombos = [
+      'men|formals|shirts',
+      'men|formals|trousers',
+      'men|formals|blazers',
+      'men|casuals|t-shirts',
+      'men|traditional|kurtas & dhotis',
+      'women|ethnic wear|sarees',
+      'women|ethnic wear|salwar kameez',
+      'women|western|kurtis',
+      'fabrics|cotton|shirting fabric',
+      'fabrics|silk|pure silk material',
+      'kids|boys|sets & rompers',
+      'kids|girls|frocks & dresses',
+    ];
+    if (legacySeedCombos.includes(`${div}|${sec}|${dept}`)) {
+      return false;
+    }
+    return true;
+  });
+}
 
 /**
  * Fetch hierarchy records.
- * First tries Supabase `store_hierarchy`. If table doesn't exist,
- * attempts to sync/read from inventory distinct entries, merges with localStorage and default seeds.
+ * Hierarchy priority:
+ * 1. Supabase `store_hierarchy` table (if present)
+ * 2. `localStorage` key `'popt_store_hierarchy'`
+ * 3. Sync and extract distinct division, section, department from existing `inventory` records in Supabase!
+ *
+ * All user-created items persist and are immediately returned.
  */
 export async function getStoreHierarchy(): Promise<StoreHierarchyItem[]> {
   let list: StoreHierarchyItem[] = [];
 
-  // 1. Try Supabase store_hierarchy table
+  // 1. Try Supabase store_hierarchy table if it exists
   try {
     const { data, error } = await supabase.from('store_hierarchy').select('*');
     if (!error && Array.isArray(data) && data.length > 0) {
-      list = data.map((d: any) => ({
-        id: String(d.id || `${d.division}-${d.section}-${d.department}`),
-        division: d.division || '',
-        section: d.section || '',
-        department: d.department || '',
-        type: (d.type === 'Textile' || d.type === 'Readymade') ? d.type : 'Readymade',
-      }));
-      // Cache to localStorage
+      list = cleanLegacySeeds(
+        data.map((d: any) => ({
+          id: String(d.id || `${d.division}-${d.section}-${d.department}`),
+          division: d.division || '',
+          section: d.section || '',
+          department: d.department || '',
+          type: (d.type === 'Textile' || d.type === 'Readymade') ? d.type : 'Readymade',
+        }))
+      );
+      // Cache cleaned to localStorage
       try {
         localStorage.setItem(HIERARCHY_STORAGE_KEY, JSON.stringify(list));
       } catch {}
       return list;
     }
   } catch (err) {
-    // Graceful fallback
+    // Graceful fallback if table does not exist
   }
 
   // 2. Read from localStorage
@@ -52,49 +82,38 @@ export async function getStoreHierarchy(): Promise<StoreHierarchyItem[]> {
     const cached = localStorage.getItem(HIERARCHY_STORAGE_KEY);
     if (cached) {
       const parsed = JSON.parse(cached);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        list = parsed;
+      if (Array.isArray(parsed)) {
+        list = cleanLegacySeeds(parsed);
       }
     }
   } catch {}
 
-  // 3. Fallback or merge with defaults
-  if (list.length === 0) {
-    list = [...DEFAULT_STORE_HIERARCHY];
-    try {
-      localStorage.setItem(HIERARCHY_STORAGE_KEY, JSON.stringify(list));
-    } catch {}
-  } else {
-    // Ensure all default seeds exist if not already present
-    const existingKeys = new Set(list.map(item => `${item.division.toLowerCase()}|${item.section.toLowerCase()}|${item.department.toLowerCase()}`));
-    for (const seed of DEFAULT_STORE_HIERARCHY) {
-      const key = `${seed.division.toLowerCase()}|${seed.section.toLowerCase()}|${seed.department.toLowerCase()}`;
-      if (!existingKeys.has(key)) {
-        list.push(seed);
-        existingKeys.add(key);
-      }
-    }
-    try {
-      localStorage.setItem(HIERARCHY_STORAGE_KEY, JSON.stringify(list));
-    } catch {}
-  }
-
-  // Also query inventory to see if there are any custom divisions/sections/departments created
+  // 3. Query existing inventory to discover any custom divisions/sections/departments created by users
   try {
     const { data: invData } = await supabase.from('inventory').select('division, section, department, category');
     if (invData && Array.isArray(invData)) {
       let updated = false;
-      const existingKeys = new Set(list.map(item => `${item.division.toLowerCase()}|${item.section.toLowerCase()}|${item.department.toLowerCase()}`));
+      const existingKeys = new Set(
+        list.map(item => `${item.division.toLowerCase()}|${item.section.toLowerCase()}|${item.department.toLowerCase()}`)
+      );
+
       for (const inv of invData) {
         if (inv.division && inv.section && inv.department) {
-          const key = `${inv.division.toLowerCase()}|${inv.section.toLowerCase()}|${inv.department.toLowerCase()}`;
+          const div = String(inv.division).trim();
+          const sec = String(inv.section).trim();
+          const dept = String(inv.department).trim();
+          const key = `${div.toLowerCase()}|${sec.toLowerCase()}|${dept.toLowerCase()}`;
+
           if (!existingKeys.has(key)) {
-            const taxType = (inv.category === 'Textile' || inv.division.toLowerCase().includes('textile') || inv.department.toLowerCase().includes('fabric')) ? 'Textile' : 'Readymade';
+            const taxType = (inv.category === 'Textile' || div.toLowerCase().includes('textile') || dept.toLowerCase().includes('fabric'))
+              ? 'Textile'
+              : 'Readymade';
+
             list.push({
               id: `inv-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-              division: inv.division,
-              section: inv.section,
-              department: inv.department,
+              division: div,
+              section: sec,
+              department: dept,
               type: taxType,
             });
             existingKeys.add(key);
@@ -102,12 +121,12 @@ export async function getStoreHierarchy(): Promise<StoreHierarchyItem[]> {
           }
         }
       }
-      if (updated) {
-        try {
-          localStorage.setItem(HIERARCHY_STORAGE_KEY, JSON.stringify(list));
-        } catch {}
-      }
     }
+  } catch {}
+
+  // Store clean state back to localStorage
+  try {
+    localStorage.setItem(HIERARCHY_STORAGE_KEY, JSON.stringify(list));
   } catch {}
 
   return list;
@@ -162,7 +181,7 @@ export async function saveStoreHierarchyItem(item: Omit<StoreHierarchyItem, 'id'
  */
 export async function deleteStoreHierarchyItem(item: StoreHierarchyItem): Promise<void> {
   // Try Supabase delete
-  if (item.id && !item.id.startsWith('seed-') && !item.id.startsWith('hier-')) {
+  if (item.id && !item.id.startsWith('seed-') && !item.id.startsWith('hier-') && !item.id.startsWith('inv-')) {
     try {
       await supabase.from('store_hierarchy').delete().eq('id', item.id);
     } catch {}

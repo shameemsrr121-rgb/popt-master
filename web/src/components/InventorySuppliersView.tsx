@@ -209,17 +209,49 @@ export const InventorySuppliersView: React.FC<InventorySuppliersViewProps> = ({
     }
   };
 
-  // Open modal and pre-seed with existing selection or first item
+  // Open modal - start fresh without forcing hardcoded selections
   const handleOpenAddProduct = () => {
-    if (hierarchyList.length > 0 && !selectedDivision) {
-      const first = hierarchyList[0];
-      setSelectedDivision(first.division);
-      setSelectedSection(first.section);
-      setSelectedDepartment(first.department);
-      setProductType(first.type);
+    // If divisions exist and user hasn't selected anything yet, default to first division
+    if (divisionOptions.length > 0 && !selectedDivision && !isCustomDivision) {
+      const firstDiv = divisionOptions[0];
+      setSelectedDivision(firstDiv);
       setIsCustomDivision(false);
-      setIsCustomSection(false);
-      setIsCustomDepartment(false);
+
+      const availSecs = Array.from(new Set(
+        hierarchyList
+          .filter(h => h.division.toLowerCase() === firstDiv.toLowerCase())
+          .map(h => h.section)
+          .filter(Boolean)
+      ));
+      if (availSecs.length > 0) {
+        setSelectedSection(availSecs[0]);
+        setIsCustomSection(false);
+
+        const availDepts = hierarchyList.filter(
+          h => h.division.toLowerCase() === firstDiv.toLowerCase() && h.section.toLowerCase() === availSecs[0].toLowerCase()
+        );
+        if (availDepts.length > 0) {
+          setSelectedDepartment(availDepts[0].department);
+          setProductType(availDepts[0].type);
+          setIsCustomDepartment(false);
+        } else {
+          setSelectedDepartment('');
+        }
+      } else {
+        setSelectedSection('');
+        setSelectedDepartment('');
+      }
+    } else if (divisionOptions.length === 0) {
+      // No divisions exist yet! Prompt user directly to add division
+      setSelectedDivision('');
+      setIsCustomDivision(true);
+      setCustomDivisionText('');
+      setSelectedSection('');
+      setIsCustomSection(true);
+      setCustomSectionText('');
+      setSelectedDepartment('');
+      setIsCustomDepartment(true);
+      setCustomDepartmentText('');
     }
     setIsAddProductOpen(true);
   };
@@ -231,10 +263,23 @@ export const InventorySuppliersView: React.FC<InventorySuppliersViewProps> = ({
       return;
     }
 
-    const finalDivision = (isCustomDivision ? customDivisionText.trim() : selectedDivision.trim()) || 'Readymade';
-    const finalSection = (isCustomSection ? customSectionText.trim() : selectedSection.trim()) || 'General';
-    const finalDepartment = (isCustomDepartment ? customDepartmentText.trim() : selectedDepartment.trim()) || 'All';
+    const finalDivision = (isCustomDivision ? customDivisionText.trim() : selectedDivision.trim());
+    const finalSection = (isCustomSection ? customSectionText.trim() : selectedSection.trim());
+    const finalDepartment = (isCustomDepartment ? customDepartmentText.trim() : selectedDepartment.trim());
     const finalType = productType;
+
+    if (!finalDivision) {
+      alert('Please specify a Division for this product');
+      return;
+    }
+    if (!finalSection) {
+      alert('Please specify a Section under Division: ' + finalDivision);
+      return;
+    }
+    if (!finalDepartment) {
+      alert('Please specify a Department under Section: ' + finalSection);
+      return;
+    }
 
     try {
       // 1. Insert into inventory (storing type in category column and as part of inventory record)
@@ -636,8 +681,26 @@ export const InventorySuppliersView: React.FC<InventorySuppliersViewProps> = ({
                   ))}
                   {filteredHierarchy.length === 0 && (
                     <tr>
-                      <td colSpan={isAdmin ? 5 : 4} className="py-12 text-center text-slate-400">
-                        No hierarchy levels found matching your query.
+                      <td colSpan={isAdmin ? 5 : 4} className="py-16 text-center">
+                        <div className="flex flex-col items-center justify-center max-w-md mx-auto space-y-3">
+                          <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+                            <FolderTree className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-slate-800 text-sm">No Store Hierarchy Defined Yet</h4>
+                            <p className="text-xs text-slate-500 mt-1">
+                              Start by adding your first Division (e.g. MENS, WOMENS, FABRICS), then organize by Section &gt; Department.
+                            </p>
+                          </div>
+                          {isAdmin && (
+                            <button
+                              onClick={() => setIsAddHierarchyOpen(true)}
+                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-sm transition-all"
+                            >
+                              <Plus className="w-4 h-4" /> + Add Division / Hierarchy
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )}
@@ -741,116 +804,212 @@ export const InventorySuppliersView: React.FC<InventorySuppliersViewProps> = ({
                 {/* Level 1: Division */}
                 <div>
                   <label className="text-xs font-semibold text-slate-700 flex items-center justify-between">
-                    <span>1. Division (Root Level)</span>
-                    {isCustomDivision && (
+                    <span>1. Division (Root Level) *</span>
+                    {divisionOptions.length > 0 && isCustomDivision && (
                       <button 
                         type="button" 
-                        onClick={() => setIsCustomDivision(false)} 
-                        className="text-[11px] text-indigo-600 hover:underline"
+                        onClick={() => {
+                          setIsCustomDivision(false);
+                          if (divisionOptions.length > 0) handleDivisionChange(divisionOptions[0]);
+                        }} 
+                        className="text-[11px] text-indigo-600 hover:underline font-semibold"
                       >
                         Choose existing
                       </button>
                     )}
                   </label>
-                  {!isCustomDivision ? (
-                    <select
-                      value={selectedDivision}
-                      onChange={(e) => handleDivisionChange(e.target.value)}
-                      className="w-full px-3 py-2 border rounded-xl text-sm bg-white font-medium focus:ring-2 focus:ring-indigo-500 mt-1"
-                    >
-                      <option value="" disabled>-- Select Division --</option>
-                      {divisionOptions.map(div => (
-                        <option key={div} value={div}>{div}</option>
-                      ))}
-                      <option value="__NEW__">+ Add New Division...</option>
-                    </select>
+                  {divisionOptions.length === 0 ? (
+                    <div className="space-y-1.5 mt-1">
+                      <input
+                        type="text"
+                        placeholder="Add your first Division (e.g. MENS, WOMENS, FABRICS)"
+                        value={customDivisionText}
+                        onChange={(e) => {
+                          setCustomDivisionText(e.target.value);
+                          setIsCustomDivision(true);
+                        }}
+                        className="w-full px-3 py-2 border-2 border-indigo-400 rounded-xl text-sm bg-indigo-50/40 font-semibold focus:ring-2 focus:ring-indigo-500"
+                        required
+                      />
+                      <p className="text-[11px] text-indigo-600 font-medium">✨ Enter your store's primary division to start hierarchy</p>
+                    </div>
+                  ) : !isCustomDivision ? (
+                    <div className="flex gap-2 mt-1">
+                      <select
+                        value={selectedDivision}
+                        onChange={(e) => handleDivisionChange(e.target.value)}
+                        className="flex-1 px-3 py-2 border rounded-xl text-sm bg-white font-medium focus:ring-2 focus:ring-indigo-500"
+                        required
+                      >
+                        <option value="">-- Select Division --</option>
+                        {divisionOptions.map(div => (
+                          <option key={div} value={div}>{div}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCustomDivision(true);
+                          setSelectedDivision('');
+                          setCustomDivisionText('');
+                          setIsCustomSection(true);
+                          setSelectedSection('');
+                          setCustomSectionText('');
+                          setIsCustomDepartment(true);
+                          setSelectedDepartment('');
+                          setCustomDepartmentText('');
+                        }}
+                        className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 whitespace-nowrap transition-colors"
+                      >
+                        + New Division
+                      </button>
+                    </div>
                   ) : (
-                    <input
-                      type="text"
-                      placeholder="Enter new division name (e.g. Men, Kids, Fabrics)"
-                      value={customDivisionText}
-                      onChange={(e) => setCustomDivisionText(e.target.value)}
-                      className="w-full px-3 py-2 border border-indigo-300 rounded-xl text-sm bg-indigo-50/50 mt-1 font-semibold focus:ring-2 focus:ring-indigo-500"
-                      required
-                    />
+                    <div className="space-y-1 mt-1">
+                      <input
+                        type="text"
+                        placeholder="Enter new division name (e.g. MENS, WOMENS)"
+                        value={customDivisionText}
+                        onChange={(e) => setCustomDivisionText(e.target.value)}
+                        className="w-full px-3 py-2 border border-indigo-300 rounded-xl text-sm bg-indigo-50/50 font-semibold focus:ring-2 focus:ring-indigo-500"
+                        required
+                      />
+                    </div>
                   )}
                 </div>
 
                 {/* Level 2: Section (Cascaded) */}
                 <div>
                   <label className="text-xs font-semibold text-slate-700 flex items-center justify-between">
-                    <span>2. Section (Under {activeDivName || 'selected division'})</span>
-                    {isCustomSection && (
+                    <span>2. Section (Under {activeDivName || 'selected division'}) *</span>
+                    {sectionOptions.length > 0 && isCustomSection && (
                       <button 
                         type="button" 
-                        onClick={() => setIsCustomSection(false)} 
-                        className="text-[11px] text-indigo-600 hover:underline"
+                        onClick={() => {
+                          setIsCustomSection(false);
+                          if (sectionOptions.length > 0) handleSectionChange(sectionOptions[0]);
+                        }} 
+                        className="text-[11px] text-indigo-600 hover:underline font-semibold"
                       >
                         Choose existing
                       </button>
                     )}
                   </label>
-                  {!isCustomSection ? (
-                    <select
-                      value={selectedSection}
-                      onChange={(e) => handleSectionChange(e.target.value)}
-                      disabled={!activeDivName}
-                      className="w-full px-3 py-2 border rounded-xl text-sm bg-white font-medium focus:ring-2 focus:ring-indigo-500 mt-1 disabled:bg-slate-100 disabled:text-slate-400"
-                    >
-                      <option value="" disabled>-- Select Section --</option>
-                      {sectionOptions.map(sec => (
-                        <option key={sec} value={sec}>{sec}</option>
-                      ))}
-                      <option value="__NEW__">+ Add New Section for this Division...</option>
-                    </select>
+                  {!activeDivName ? (
+                    <div className="px-3 py-2 border rounded-xl text-sm bg-slate-50 text-slate-400 mt-1 italic">
+                      Please select or enter a Division first
+                    </div>
+                  ) : sectionOptions.length === 0 || isCustomSection ? (
+                    <div className="space-y-1 mt-1">
+                      <input
+                        type="text"
+                        placeholder={`Enter new section for ${activeDivName} (e.g. FORMALS, CASUALS)`}
+                        value={customSectionText}
+                        onChange={(e) => {
+                          setCustomSectionText(e.target.value);
+                          setIsCustomSection(true);
+                        }}
+                        className="w-full px-3 py-2 border border-indigo-300 rounded-xl text-sm bg-indigo-50/50 font-semibold focus:ring-2 focus:ring-indigo-500"
+                        required
+                      />
+                      {sectionOptions.length === 0 && (
+                        <p className="text-[11px] text-slate-500">No existing sections for {activeDivName}. Type a new one.</p>
+                      )}
+                    </div>
                   ) : (
-                    <input
-                      type="text"
-                      placeholder={`Enter new section for ${activeDivName || 'this division'} (e.g. Formals, Casuals)`}
-                      value={customSectionText}
-                      onChange={(e) => setCustomSectionText(e.target.value)}
-                      className="w-full px-3 py-2 border border-indigo-300 rounded-xl text-sm bg-indigo-50/50 mt-1 font-semibold focus:ring-2 focus:ring-indigo-500"
-                      required
-                    />
+                    <div className="flex gap-2 mt-1">
+                      <select
+                        value={selectedSection}
+                        onChange={(e) => handleSectionChange(e.target.value)}
+                        className="flex-1 px-3 py-2 border rounded-xl text-sm bg-white font-medium focus:ring-2 focus:ring-indigo-500"
+                        required
+                      >
+                        <option value="">-- Select Section --</option>
+                        {sectionOptions.map(sec => (
+                          <option key={sec} value={sec}>{sec}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCustomSection(true);
+                          setSelectedSection('');
+                          setCustomSectionText('');
+                          setIsCustomDepartment(true);
+                          setSelectedDepartment('');
+                          setCustomDepartmentText('');
+                        }}
+                        className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 whitespace-nowrap transition-colors"
+                      >
+                        + New Section
+                      </button>
+                    </div>
                   )}
                 </div>
 
                 {/* Level 3: Department (Cascaded) */}
                 <div>
                   <label className="text-xs font-semibold text-slate-700 flex items-center justify-between">
-                    <span>3. Department (Under {activeSecName || 'selected section'})</span>
-                    {isCustomDepartment && (
+                    <span>3. Department (Under {activeSecName || 'selected section'}) *</span>
+                    {departmentOptions.length > 0 && isCustomDepartment && (
                       <button 
                         type="button" 
-                        onClick={() => setIsCustomDepartment(false)} 
-                        className="text-[11px] text-indigo-600 hover:underline"
+                        onClick={() => {
+                          setIsCustomDepartment(false);
+                          if (departmentOptions.length > 0) handleDepartmentChange(departmentOptions[0]);
+                        }} 
+                        className="text-[11px] text-indigo-600 hover:underline font-semibold"
                       >
                         Choose existing
                       </button>
                     )}
                   </label>
-                  {!isCustomDepartment ? (
-                    <select
-                      value={selectedDepartment}
-                      onChange={(e) => handleDepartmentChange(e.target.value)}
-                      disabled={!activeSecName}
-                      className="w-full px-3 py-2 border rounded-xl text-sm bg-white font-medium focus:ring-2 focus:ring-indigo-500 mt-1 disabled:bg-slate-100 disabled:text-slate-400"
-                    >
-                      <option value="" disabled>-- Select Department --</option>
-                      {departmentOptions.map(dept => (
-                        <option key={dept} value={dept}>{dept}</option>
-                      ))}
-                      <option value="__NEW__">+ Add New Department...</option>
-                    </select>
+                  {!activeSecName ? (
+                    <div className="px-3 py-2 border rounded-xl text-sm bg-slate-50 text-slate-400 mt-1 italic">
+                      Please select or enter a Section first
+                    </div>
+                  ) : departmentOptions.length === 0 || isCustomDepartment ? (
+                    <div className="space-y-1 mt-1">
+                      <input
+                        type="text"
+                        placeholder={`Enter new department for ${activeSecName} (e.g. COTTON SHIRTS, LINEN)`}
+                        value={customDepartmentText}
+                        onChange={(e) => {
+                          setCustomDepartmentText(e.target.value);
+                          setIsCustomDepartment(true);
+                        }}
+                        className="w-full px-3 py-2 border border-indigo-300 rounded-xl text-sm bg-indigo-50/50 font-semibold focus:ring-2 focus:ring-indigo-500"
+                        required
+                      />
+                      {departmentOptions.length === 0 && (
+                        <p className="text-[11px] text-slate-500">No existing departments for {activeSecName}. Type a new one.</p>
+                      )}
+                    </div>
                   ) : (
-                    <input
-                      type="text"
-                      placeholder={`Enter new department for ${activeSecName || 'this section'} (e.g. Shirts, Trousers)`}
-                      value={customDepartmentText}
-                      onChange={(e) => setCustomDepartmentText(e.target.value)}
-                      className="w-full px-3 py-2 border border-indigo-300 rounded-xl text-sm bg-indigo-50/50 mt-1 font-semibold focus:ring-2 focus:ring-indigo-500"
-                      required
-                    />
+                    <div className="flex gap-2 mt-1">
+                      <select
+                        value={selectedDepartment}
+                        onChange={(e) => handleDepartmentChange(e.target.value)}
+                        className="flex-1 px-3 py-2 border rounded-xl text-sm bg-white font-medium focus:ring-2 focus:ring-indigo-500"
+                        required
+                      >
+                        <option value="">-- Select Department --</option>
+                        {departmentOptions.map(dept => (
+                          <option key={dept} value={dept}>{dept}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCustomDepartment(true);
+                          setSelectedDepartment('');
+                          setCustomDepartmentText('');
+                        }}
+                        className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 whitespace-nowrap transition-colors"
+                      >
+                        + New Dept
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
