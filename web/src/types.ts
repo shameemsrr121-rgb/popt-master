@@ -76,6 +76,7 @@ export interface InventoryItem {
   category4: string; // Fit
   category5: string; // Size
   category6: string; // Color
+  photo_uri?: string | null;
 }
 
 export interface StoreHierarchyItem {
@@ -143,6 +144,7 @@ export interface PurchasePlan {
   status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CONVERTED_TO_PO';
   reminder_days_before: number;
   converted_po_id?: number | null;
+  photo_uri?: string | null;
   created_by: string;
   created_at?: string;
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Plus, 
   Search, 
@@ -12,11 +12,13 @@ import {
   AlertCircle,
   Calendar,
   Building,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Camera
 } from 'lucide-react';
 import { PurchaseOrder, PurchaseOrderItem, Supplier, Location, InventoryItem, CompanyProfile, User, TaxRule } from '../types';
 import { supabase, uploadPoAttachment } from '../lib/supabase';
 import { calculateTaxRate, getTaxFlowBadge } from '../lib/taxMaster';
+import { CameraCaptureDialog } from './CameraCaptureDialog';
 
 interface PurchaseOrdersViewProps {
   orders: PurchaseOrder[];
@@ -59,7 +61,10 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
   const [locationName, setLocationName] = useState('Central Warehouse');
   const [notes, setNotes] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const fileUploadInputRef = useRef<HTMLInputElement | null>(null);
 
   // Line items for Create PO
   const [lineItems, setLineItems] = useState<Array<PurchaseOrderItem>>([
@@ -303,6 +308,8 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
       }
 
       setIsCreateOpen(false);
+      setSelectedFile(null);
+      setPreviewPhotoUrl(null);
       onRefresh();
     } catch (err: any) {
       alert(`Error creating PO: ${err.message}`);
@@ -748,14 +755,89 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 mb-2">
                       Attach Reference Photo / Proforma (Cloud Storage)
                     </label>
+
+                    {previewPhotoUrl ? (
+                      <div className="relative border-2 border-dashed border-indigo-200 bg-indigo-50/30 rounded-2xl p-3 flex items-center gap-4">
+                        <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-white border border-slate-200 shadow-sm flex-shrink-0">
+                          {selectedFile?.type.includes('pdf') ? (
+                            <div className="w-full h-full flex flex-col items-center justify-center text-rose-500 bg-rose-50">
+                              <FileText className="w-8 h-8" />
+                              <span className="text-[10px] font-bold mt-1">PDF</span>
+                            </div>
+                          ) : (
+                            <img
+                              src={previewPhotoUrl}
+                              alt="Attachment preview"
+                              className="w-full h-full object-cover"
+                            />
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-slate-800 truncate">
+                            {selectedFile?.name || 'Attached Photo'}
+                          </p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            {selectedFile ? `${(selectedFile.size / 1024).toFixed(1)} KB` : 'Ready to upload'}
+                          </p>
+                          <div className="flex items-center gap-2 mt-2">
+                            <button
+                              type="button"
+                              onClick={() => setIsCameraOpen(true)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition-colors"
+                            >
+                              <Camera className="w-3 h-3 text-indigo-600" /> Retake Photo
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedFile(null);
+                                setPreviewPhotoUrl(null);
+                              }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-100 text-[11px] font-semibold text-rose-600 hover:bg-rose-100 transition-colors"
+                            >
+                              <Trash2 className="w-3 h-3" /> Remove
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => setIsCameraOpen(true)}
+                          className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100/70 text-indigo-700 font-bold text-xs shadow-2xs transition-all active:scale-[0.99]"
+                        >
+                          <Camera className="w-4 h-4 text-indigo-600" />
+                          <span>Snap Camera Photo</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => fileUploadInputRef.current?.click()}
+                          className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold text-xs shadow-2xs transition-all active:scale-[0.99]"
+                        >
+                          <Upload className="w-4 h-4 text-slate-500" />
+                          <span>Choose from Files / Gallery</span>
+                        </button>
+                      </div>
+                    )}
+
                     <input
+                      ref={fileUploadInputRef}
                       type="file"
                       accept="image/*,.pdf"
-                      onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-                      className="block w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setSelectedFile(file);
+                          setPreviewPhotoUrl(URL.createObjectURL(file));
+                        }
+                      }}
+                      className="hidden"
                     />
                   </div>
                 </div>
@@ -1039,6 +1121,17 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Live Camera Viewfinder Dialog */}
+      <CameraCaptureDialog
+        isOpen={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        title="Snap PO Reference / Sample Photo"
+        onPhotoCaptured={(file, previewUrl) => {
+          setSelectedFile(file);
+          setPreviewPhotoUrl(previewUrl);
+        }}
+      />
     </div>
   );
 };
