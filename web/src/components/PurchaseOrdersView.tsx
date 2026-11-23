@@ -13,7 +13,9 @@ import {
   Calendar,
   Building,
   Image as ImageIcon,
-  Camera
+  Camera,
+  Loader2,
+  ZoomIn
 } from 'lucide-react';
 import { PurchaseOrder, PurchaseOrderItem, Supplier, Location, InventoryItem, CompanyProfile, User, TaxRule } from '../types';
 import { supabase, uploadPoAttachment } from '../lib/supabase';
@@ -65,6 +67,15 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileUploadInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Line item camera & photo upload state
+  const [activeItemCameraIndex, setActiveItemCameraIndex] = useState<number | null>(null);
+  const [uploadingItemIndex, setUploadingItemIndex] = useState<number | null>(null);
+  const itemFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [targetUploadIndex, setTargetUploadIndex] = useState<number | null>(null);
+
+  // Full-size image preview viewer modal
+  const [viewingImageModalUrl, setViewingImageModalUrl] = useState<{ url: string; title: string } | null>(null);
 
   // Line items for Create PO
   const [lineItems, setLineItems] = useState<Array<PurchaseOrderItem>>([
@@ -166,6 +177,7 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
       item_name: invItem.name,
       unit_price: unitPrice,
       tax_percent: calcResult.rate,
+      photo_uri: invItem.photo_uri || undefined,
       division: invItem.division || 'Readymade',
       section: invItem.section || '',
       department: invItem.department || '',
@@ -185,6 +197,39 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
         return next;
       });
     }
+  };
+
+  const handleCaptureItemPhoto = async (index: number, file: File) => {
+    setUploadingItemIndex(index);
+    try {
+      const uploadedUrl = await uploadPoAttachment(file, `dress_${index + 1}`);
+      if (uploadedUrl) {
+        updateLineItem(index, { photo_uri: uploadedUrl });
+      } else {
+        alert('Failed to upload image. Please check your network connection and try again.');
+      }
+    } catch (err: any) {
+      console.error('Error uploading line item photo:', err);
+      alert('Error uploading item photo.');
+    } finally {
+      setUploadingItemIndex(null);
+    }
+  };
+
+  const handleTriggerItemFileInput = (index: number) => {
+    setTargetUploadIndex(index);
+    if (itemFileInputRef.current) {
+      itemFileInputRef.current.value = '';
+      itemFileInputRef.current.click();
+    }
+  };
+
+  const handleItemFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && targetUploadIndex !== null) {
+      await handleCaptureItemPhoto(targetUploadIndex, file);
+    }
+    setTargetUploadIndex(null);
   };
 
   const calculateSubtotal = () => lineItems.reduce((sum, item) => sum + item.taxable_amount, 0);
@@ -249,6 +294,7 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
       // 2. Insert Line Items
       const itemsToInsert = lineItems.map(item => ({
         po_id: poData.id,
+        inventory_item_id: item.inventory_item_id || null,
         item_sku: item.item_sku,
         item_name: item.item_name,
         quantity_ordered: item.quantity_ordered,
@@ -258,6 +304,7 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
         taxable_amount: item.taxable_amount,
         tax_amount: item.tax_amount,
         total_price: item.total_price,
+        photo_uri: item.photo_uri || null,
         location: item.location || locationName,
         division: item.division || 'Readymade',
         section: item.section || 'Main Store',
@@ -578,6 +625,7 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                   <table className="w-full text-left text-xs">
                     <thead className="bg-slate-50 border-b border-slate-200 font-bold text-slate-600">
                       <tr>
+                        <th className="p-3 w-24">Dress Photo</th>
                         <th className="p-3 w-28">SKU</th>
                         <th className="p-3 min-w-[220px]">Item Description &amp; Tax Flow *</th>
                         <th className="p-3 w-20">Qty *</th>
@@ -600,9 +648,76 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                           customRules: taxRules
                         });
                         const isOverridden = !!customTaxOverrides[idx];
+                        const isThisItemUploading = uploadingItemIndex === idx;
 
                         return (
                           <tr key={idx} className="hover:bg-slate-50/50 align-top">
+                            {/* Dress / Item Photo Column */}
+                            <td className="p-2">
+                              {isThisItemUploading ? (
+                                <div className="w-14 h-14 rounded-xl border border-dashed border-indigo-300 bg-indigo-50/50 flex flex-col items-center justify-center text-indigo-600 gap-1">
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  <span className="text-[9px] font-semibold">Saving...</span>
+                                </div>
+                              ) : item.photo_uri ? (
+                                <div className="relative group w-14 h-14 rounded-xl overflow-hidden border border-slate-200 shadow-xs bg-slate-50">
+                                  <img
+                                    src={item.photo_uri}
+                                    alt={item.item_name || 'Dress'}
+                                    className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform"
+                                    onClick={() => setViewingImageModalUrl({ url: item.photo_uri!, title: item.item_name || `Item ${idx + 1}` })}
+                                  />
+                                  {/* Quick Actions Overlay */}
+                                  <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 p-1">
+                                    <button
+                                      type="button"
+                                      title="View Fullsize"
+                                      onClick={() => setViewingImageModalUrl({ url: item.photo_uri!, title: item.item_name || `Item ${idx + 1}` })}
+                                      className="p-1 rounded-md bg-white/90 hover:bg-white text-slate-800 shadow-xs transition-colors"
+                                    >
+                                      <ZoomIn className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      title="Retake / Change Photo"
+                                      onClick={() => setActiveItemCameraIndex(idx)}
+                                      className="p-1 rounded-md bg-white/90 hover:bg-white text-indigo-600 shadow-xs transition-colors"
+                                    >
+                                      <Camera className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      title="Remove Photo"
+                                      onClick={() => updateLineItem(idx, { photo_uri: null })}
+                                      className="p-1 rounded-md bg-white/90 hover:bg-white text-rose-600 shadow-xs transition-colors"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex flex-col gap-1 w-20">
+                                  <button
+                                    type="button"
+                                    onClick={() => setActiveItemCameraIndex(idx)}
+                                    title="Snap live camera photo of this dress"
+                                    className="inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-bold border border-indigo-200/80 transition-colors shadow-2xs"
+                                  >
+                                    <Camera className="w-3 h-3 shrink-0" />
+                                    <span>Snap</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTriggerItemFileInput(idx)}
+                                    title="Upload picture from gallery / file"
+                                    className="inline-flex items-center justify-center gap-1 px-1.5 py-1 rounded-md bg-slate-50 hover:bg-slate-100 text-slate-600 text-[10px] font-medium border border-slate-200 transition-colors"
+                                  >
+                                    <Upload className="w-2.5 h-2.5 shrink-0" />
+                                    <span>Upload</span>
+                                  </button>
+                                </div>
+                              )}
+                            </td>
                             <td className="p-2">
                               <input
                                 type="text"
@@ -1002,6 +1117,7 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                 <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden">
                   <thead className="bg-slate-100 font-bold text-slate-700">
                     <tr>
+                      <th className="p-2.5 w-14 text-center">Photo</th>
                       <th className="p-2.5">Item Name / SKU</th>
                       <th className="p-2.5 text-center">Qty</th>
                       <th className="p-2.5 text-right">Unit Price</th>
@@ -1016,8 +1132,23 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                       selectedPOForView.items.map((item, idx) => {
                         const taxRate = Number(item.tax_percent) || 0;
                         const halfRate = taxRate / 2;
+                        const displayPhoto = item.photo_uri || (selectedPOForView.items?.length === 1 ? selectedPOForView.photo_uri : null);
                         return (
-                          <tr key={idx}>
+                          <tr key={idx} className="align-middle">
+                            <td className="p-2 text-center">
+                              {displayPhoto ? (
+                                <img
+                                  src={displayPhoto}
+                                  alt={item.item_name}
+                                  onClick={() => setViewingImageModalUrl({ url: displayPhoto, title: item.item_name })}
+                                  className="w-11 h-11 object-cover rounded-lg border border-slate-200 shadow-2xs mx-auto cursor-pointer hover:opacity-90"
+                                />
+                              ) : (
+                                <div className="w-11 h-11 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-300 mx-auto">
+                                  <ImageIcon className="w-4 h-4" />
+                                </div>
+                              )}
+                            </td>
                             <td className="p-2.5">
                               <span className="font-semibold text-slate-900">{item.item_name}</span>
                               <span className="block text-[11px] text-slate-500">{item.item_sku}</span>
@@ -1036,6 +1167,9 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                       })
                     ) : (
                       <tr>
+                        <td className="p-2 text-center text-slate-300">
+                          <ImageIcon className="w-4 h-4 mx-auto" />
+                        </td>
                         <td className="p-2.5 font-medium">Standard Purchase Order Items</td>
                         <td className="p-2.5 text-center font-bold">1</td>
                         <td className="p-2.5 text-right">₹{Number(selectedPOForView.subtotal).toFixed(2)}</td>
@@ -1122,7 +1256,7 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
         </div>
       )}
 
-      {/* Live Camera Viewfinder Dialog */}
+      {/* Live Camera Viewfinder Dialog for General PO */}
       <CameraCaptureDialog
         isOpen={isCameraOpen}
         onClose={() => setIsCameraOpen(false)}
@@ -1132,6 +1266,64 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
           setPreviewPhotoUrl(previewUrl);
         }}
       />
+
+      {/* Live Camera Viewfinder Dialog for Individual Dress / Line Item */}
+      {activeItemCameraIndex !== null && (
+        <CameraCaptureDialog
+          isOpen={true}
+          onClose={() => setActiveItemCameraIndex(null)}
+          title={`Snap Dress Photo: ${lineItems[activeItemCameraIndex]?.item_name || `Line Item #${activeItemCameraIndex + 1}`}`}
+          onPhotoCaptured={async (file) => {
+            const idx = activeItemCameraIndex;
+            setActiveItemCameraIndex(null);
+            if (idx !== null) {
+              await handleCaptureItemPhoto(idx, file);
+            }
+          }}
+        />
+      )}
+
+      {/* Hidden file input for Line Item file uploads */}
+      <input
+        ref={itemFileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleItemFileSelected}
+        className="hidden"
+      />
+
+      {/* Full-size Image Viewer Modal */}
+      {viewingImageModalUrl && (
+        <div 
+          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setViewingImageModalUrl(null)}
+        >
+          <div 
+            className="relative max-w-3xl max-h-[90vh] bg-white rounded-3xl overflow-hidden shadow-2xl border border-slate-700/50 flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 bg-slate-50/80">
+              <div className="flex items-center gap-2">
+                <ImageIcon className="w-4 h-4 text-indigo-600" />
+                <span className="text-sm font-bold text-slate-800">{viewingImageModalUrl.title}</span>
+              </div>
+              <button
+                onClick={() => setViewingImageModalUrl(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-200/60 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 flex items-center justify-center bg-slate-900/5 overflow-auto max-h-[calc(90vh-65px)]">
+              <img
+                src={viewingImageModalUrl.url}
+                alt={viewingImageModalUrl.title}
+                className="max-w-full max-h-[75vh] rounded-xl object-contain shadow-md"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

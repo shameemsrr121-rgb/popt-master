@@ -8,7 +8,9 @@ import {
   Search, 
   X, 
   ArrowRight,
-  Package
+  Package,
+  Image as ImageIcon,
+  ZoomIn
 } from 'lucide-react';
 import { PurchaseOrder, PurchaseOrderItem, User } from '../types';
 import { supabase } from '../lib/supabase';
@@ -28,6 +30,7 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
   const [receivingItems, setReceivingItems] = useState<PurchaseOrderItem[]>([]);
   const [isReceivingModalOpen, setIsReceivingModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [viewingDressImage, setViewingDressImage] = useState<{ url: string; title: string } | null>(null);
 
   // Filter only orders that need receiving or are received
   const deliveryOrders = orders.filter(o => 
@@ -198,6 +201,7 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-50 font-bold text-slate-700 border-b border-slate-200">
                     <tr>
+                      <th className="p-3 w-16 text-center">Dress Photo</th>
                       <th className="p-3">SKU & Item Name</th>
                       <th className="p-3 text-center">Ordered</th>
                       <th className="p-3 text-center">Received</th>
@@ -207,8 +211,33 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
                   <tbody className="divide-y divide-slate-100">
                     {receivingItems.map((item, idx) => {
                       const isComplete = item.quantity_received >= item.quantity_ordered;
+                      const dressPhoto = item.photo_uri || selectedOrder?.photo_uri;
                       return (
-                        <tr key={idx} className="hover:bg-slate-50/50">
+                        <tr key={idx} className="hover:bg-slate-50/50 align-middle">
+                          <td className="p-2.5 text-center">
+                            {dressPhoto ? (
+                              <div className="relative group w-12 h-12 mx-auto rounded-lg overflow-hidden border border-slate-200 shadow-2xs bg-slate-50">
+                                <img
+                                  src={dressPhoto}
+                                  alt={item.item_name}
+                                  onClick={() => setViewingDressImage({ url: dressPhoto, title: item.item_name })}
+                                  className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingDressImage({ url: dressPhoto, title: item.item_name })}
+                                  className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white"
+                                  title="Enlarge dress photo"
+                                >
+                                  <ZoomIn className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="w-12 h-12 mx-auto rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-300">
+                                <ImageIcon className="w-4 h-4" />
+                              </div>
+                            )}
+                          </td>
                           <td className="p-3">
                             <span className="font-bold text-slate-900 block">{item.item_name}</span>
                             <span className="text-[11px] text-slate-400">{item.item_sku}</span>
@@ -262,6 +291,39 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
                   {isSaving ? 'Updating Stock...' : 'Save Stock Receipt'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full-size Image Viewer Modal */}
+      {viewingDressImage && (
+        <div 
+          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setViewingDressImage(null)}
+        >
+          <div 
+            className="relative max-w-3xl max-h-[90vh] bg-white rounded-3xl overflow-hidden shadow-2xl border border-slate-700/50 flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 bg-slate-50/80">
+              <div className="flex items-center gap-2">
+                <ImageIcon className="w-4 h-4 text-indigo-600" />
+                <span className="text-sm font-bold text-slate-800">{viewingDressImage.title}</span>
+              </div>
+              <button
+                onClick={() => setViewingDressImage(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-200/60 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 flex items-center justify-center bg-slate-900/5 overflow-auto max-h-[calc(90vh-65px)]">
+              <img
+                src={viewingDressImage.url}
+                alt={viewingDressImage.title}
+                className="max-w-full max-h-[75vh] rounded-xl object-contain shadow-md"
+              />
             </div>
           </div>
         </div>
