@@ -71,8 +71,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [modProcurement, setModProcurement] = useState(true);
   const [modInventory, setModInventory] = useState(true);
   const [modReport, setModReport] = useState(true);
-  const [modMargin, setModMargin] = useState(false);
-  const [modGSheets, setModGSheets] = useState(false);
   const [modAdminPanel, setModAdminPanel] = useState(false);
   const [modCanDeletePO, setModCanDeletePO] = useState(false);
 
@@ -82,8 +80,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       setModProcurement(true);
       setModInventory(true);
       setModReport(true);
-      setModMargin(true);
-      setModGSheets(true);
       setModAdminPanel(true);
       setModCanDeletePO(true);
     } else {
@@ -204,8 +200,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         show_inventory: modInventory,
         show_supplier: modInventory,
         show_report: modReport,
-        show_margin: modMargin,
-        show_google_sheets: modGSheets,
+        show_margin: false,
+        show_google_sheets: false,
         show_admin_panel: isAdminRole || modAdminPanel,
       });
 
@@ -218,8 +214,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       setModProcurement(true);
       setModInventory(true);
       setModReport(true);
-      setModMargin(false);
-      setModGSheets(false);
       setModAdminPanel(false);
       setModCanDeletePO(false);
       fetchUsers();
@@ -493,12 +487,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           {u.show_inventory && (
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">Hierarchy</span>
                           )}
-                          {u.show_margin && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700">Margin</span>
-                          )}
-                          {u.show_google_sheets && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700">Sheets</span>
-                          )}
                           {u.can_delete_po && (
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700">Del PO</span>
                           )}
@@ -579,8 +567,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   {([
                     { label: 'Purchase Orders & Procurement', checked: modProcurement, onChange: setModProcurement, id: 'mod_proc' },
                     { label: 'Store Hierarchy & Supplier Directory', checked: modInventory, onChange: setModInventory, id: 'mod_inv' },
-                    { label: 'Margin / Cost Analysis', checked: modMargin, onChange: setModMargin, id: 'mod_margin' },
-                    { label: 'Google Sheets Export', checked: modGSheets, onChange: setModGSheets, id: 'mod_gsh' },
                     { label: 'Can Delete Purchase Orders', checked: modCanDeletePO, onChange: setModCanDeletePO, id: 'mod_delpo' },
                   ] as { label: string; checked: boolean; onChange: (v: boolean) => void; id: string }[]).map((item) => (
                     <label key={item.id} className="flex items-center gap-2 cursor-pointer">
