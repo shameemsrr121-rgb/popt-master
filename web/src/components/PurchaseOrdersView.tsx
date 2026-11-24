@@ -22,6 +22,7 @@ import {
   CheckSquare,
   Square,
   Sparkles,
+  Layers,
   RefreshCw
 } from 'lucide-react';
 import { PurchaseOrder, PurchaseOrderItem, Supplier, Location, InventoryItem, CompanyProfile, User, TaxRule, StoreHierarchyItem } from '../types';
@@ -63,6 +64,9 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [selectedSupplierFilter, setSelectedSupplierFilter] = useState('ALL');
+  const [selectedDepartmentFilter, setSelectedDepartmentFilter] = useState('ALL');
+  const [selectedDateFilter, setSelectedDateFilter] = useState('');
 
   // Form states for Create PO
   const [supplierId, setSupplierId] = useState<number>(suppliers[0]?.id || 0);
@@ -215,15 +219,56 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
   };
 
   const toggleBranchSelection = (branchName: string) => {
+    let newBranches: string[];
     if (selectedBranches.includes(branchName)) {
       if (selectedBranches.length === 1) {
         alert('At least one branch / warehouse must be selected');
         return;
       }
-      setSelectedBranches(selectedBranches.filter(b => b !== branchName));
+      newBranches = selectedBranches.filter(b => b !== branchName);
     } else {
-      setSelectedBranches([...selectedBranches, branchName]);
+      newBranches = [...selectedBranches, branchName];
     }
+    setSelectedBranches(newBranches);
+
+    // Sync to line items that haven't been manually diverged
+    const newLocStr = newBranches.join(', ');
+    setLineItems(prev => prev.map(item => ({
+      ...item,
+      location: item.location ? item.location : newLocStr
+    })));
+  };
+
+  const handleItemDepartmentChange = (index: number, deptName: string) => {
+    const trimmedDept = deptName.trim().toLowerCase();
+    const match = hierarchyList.find(h => h.department.trim().toLowerCase() === trimmedDept);
+
+    const div = match ? match.division : (lineItems[index]?.division || autoDivision || 'Readymade');
+    const sec = match ? match.section : (lineItems[index]?.section || autoSection || 'Main Store');
+    const typ = match ? match.type : (autoTaxType || 'Readymade');
+
+    updateLineItem(index, {
+      department: deptName,
+      division: div,
+      section: sec
+    });
+  };
+
+  const toggleItemBranch = (index: number, branchName: string) => {
+    const item = lineItems[index];
+    if (!item) return;
+    const currentLocs = (item.location || '').split(', ').map(s => s.trim()).filter(Boolean);
+    let nextLocs: string[];
+    if (currentLocs.includes(branchName)) {
+      if (currentLocs.length <= 1) {
+        alert('Item must have at least one branch assigned');
+        return;
+      }
+      nextLocs = currentLocs.filter(b => b !== branchName);
+    } else {
+      nextLocs = [...currentLocs, branchName];
+    }
+    updateLineItem(index, { location: nextLocs.join(', ') });
   };
 
   const selectAllBranches = () => {
@@ -606,15 +651,46 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
     }
   };
 
-  // Filtered orders
+  // Extract unique filter options for PO list
+  const poSupplierOptions = Array.from(new Set(orders.map(o => o.supplier_name).filter(Boolean))).sort();
+  const poDepartmentOptions = Array.from(new Set(
+    orders.flatMap(o => (o.items || []).map(i => i.department).concat([o.department || ''])).filter(Boolean)
+  )).sort();
+
+  // Filtered orders with Slicers
   const filteredOrders = orders.filter(po => {
     const matchesSearch = po.po_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
       po.supplier_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (po.notes && po.notes.toLowerCase().includes(searchQuery.toLowerCase()));
+      (po.notes && po.notes.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (po.items || []).some(i => i.item_name.toLowerCase().includes(searchQuery.toLowerCase()));
     
     const matchesStatus = statusFilter === 'ALL' || po.status === statusFilter;
-    return matchesSearch && matchesStatus;
+
+    const matchesSupplier = selectedSupplierFilter === 'ALL' || po.supplier_name === selectedSupplierFilter;
+
+    const matchesDept = selectedDepartmentFilter === 'ALL' || 
+      (po.department || '').toLowerCase() === selectedDepartmentFilter.toLowerCase() ||
+      (po.items || []).some(i => (i.department || '').toLowerCase() === selectedDepartmentFilter.toLowerCase());
+
+    let matchesDate = true;
+    if (selectedDateFilter) {
+      const orderDateIso = new Date(Number(po.order_date_millis)).toISOString().split('T')[0];
+      const createdDateIso = po.created_at ? new Date(po.created_at).toISOString().split('T')[0] : '';
+      matchesDate = orderDateIso === selectedDateFilter || createdDateIso === selectedDateFilter;
+    }
+
+    return matchesSearch && matchesStatus && matchesSupplier && matchesDept && matchesDate;
   });
+
+  const clearPOFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('ALL');
+    setSelectedSupplierFilter('ALL');
+    setSelectedDepartmentFilter('ALL');
+    setSelectedDateFilter('');
+  };
+
+  const hasActivePOFilters = searchQuery || statusFilter !== 'ALL' || selectedSupplierFilter !== 'ALL' || selectedDepartmentFilter !== 'ALL' || selectedDateFilter;
 
   return (
     <div className="space-y-6">
@@ -635,35 +711,99 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
         </button>
       </div>
 
-      {/* Filter Tabs & Search Bar */}
-      <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-        {/* Status Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1">
-          {['ALL', 'ISSUED', 'PARTIALLY_RECEIVED', 'RECEIVED', 'DRAFT', 'CANCELLED'].map(status => (
+      {/* Filter Tabs, Slicers & Search Bar */}
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80 space-y-3">
+        {/* Status Pills & Reset */}
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 pb-2 border-b border-slate-100">
+          <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1">
+            {['ALL', 'ISSUED', 'PARTIALLY_RECEIVED', 'RECEIVED', 'DRAFT', 'CANCELLED'].map(status => (
+              <button
+                key={status}
+                onClick={() => setStatusFilter(status)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                  statusFilter === status
+                    ? 'bg-slate-900 text-white shadow-sm'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/80'
+                }`}
+              >
+                {status === 'ALL' ? 'All Orders' : status.replace('_', ' ')}
+              </button>
+            ))}
+          </div>
+
+          {hasActivePOFilters && (
             <button
-              key={status}
-              onClick={() => setStatusFilter(status)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-                statusFilter === status
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
-              }`}
+              onClick={clearPOFilters}
+              className="text-xs font-semibold text-rose-600 hover:text-rose-700 hover:underline flex items-center gap-1 whitespace-nowrap self-end md:self-auto"
             >
-              {status === 'ALL' ? 'All Orders' : status.replace('_', ' ')}
+              <X className="w-3.5 h-3.5" /> Reset Slicers
             </button>
-          ))}
+          )}
         </div>
 
-        {/* Search Input */}
-        <div className="relative w-full md:w-72">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search PO#, supplier, notes..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
-          />
+        {/* 4 Interactive Slicers */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+          {/* Slicer 1: Search Keywords */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-1">Search Keywords</label>
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="PO#, supplier, items..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
+          {/* Slicer 2: Order Date */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-1 flex items-center gap-1">
+              <Calendar className="w-3 h-3 text-indigo-600" /> Order Date
+            </label>
+            <input
+              type="date"
+              value={selectedDateFilter}
+              onChange={(e) => setSelectedDateFilter(e.target.value)}
+              className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+            />
+          </div>
+
+          {/* Slicer 3: Supplier Slicer */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-1 flex items-center gap-1">
+              <Building className="w-3 h-3 text-indigo-600" /> Supplier Slicer
+            </label>
+            <select
+              value={selectedSupplierFilter}
+              onChange={(e) => setSelectedSupplierFilter(e.target.value)}
+              className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+            >
+              <option value="ALL">All Suppliers ({poSupplierOptions.length})</option>
+              {poSupplierOptions.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Slicer 4: Department Slicer */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-1 flex items-center gap-1">
+              <Layers className="w-3 h-3 text-indigo-600" /> Department Slicer
+            </label>
+            <select
+              value={selectedDepartmentFilter}
+              onChange={(e) => setSelectedDepartmentFilter(e.target.value)}
+              className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+            >
+              <option value="ALL">All Departments ({poDepartmentOptions.length})</option>
+              {poDepartmentOptions.map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -1123,8 +1263,8 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                               )}
                             </td>
 
-                            {/* Item Name & Auto-Hierarchy badge */}
-                            <td className="p-2 space-y-1">
+                            {/* Item Name, Department Selector & Branch Destination */}
+                            <td className="p-2 space-y-2">
                               <input
                                 type="text"
                                 placeholder="e.g. Silk Saree, Cotton Shirt, Kurta..."
@@ -1134,36 +1274,55 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                                 required
                               />
 
-                              {/* Department & Division & Section badge */}
-                              <div className="flex items-center gap-1 flex-wrap">
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
-                                  📁 {item.department || selectedDepartment || 'General'}
-                                  {(item.division || autoDivision) && (
-                                    <span className="text-slate-400 ml-1">
-                                      ({item.division || autoDivision} &gt; {item.section || autoSection || 'Main Store'})
-                                    </span>
-                                  )}
-                                </span>
+                              {/* Per-Item Department Selection */}
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[10px] font-bold text-slate-500">Dept:</span>
+                                <input
+                                  type="text"
+                                  list={`dept-list-${idx}`}
+                                  placeholder="Select or type department..."
+                                  value={item.department || selectedDepartment || ''}
+                                  onChange={(e) => handleItemDepartmentChange(idx, e.target.value)}
+                                  className="px-2 py-1 bg-white border border-slate-300 rounded-md text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-36"
+                                />
+                                <datalist id={`dept-list-${idx}`}>
+                                  {Array.from(new Set(hierarchyList.map(h => h.department).filter(Boolean))).map(d => (
+                                    <option key={d} value={d} />
+                                  ))}
+                                </datalist>
+                                {(item.division || autoDivision) && (
+                                  <span className="text-[10px] text-slate-400">
+                                    ({item.division || autoDivision} &gt; {item.section || autoSection || 'Main'})
+                                  </span>
+                                )}
                               </div>
 
-                              {/* Inventory Quick Match if available */}
-                              {inventory.length > 0 && !item.inventory_item_id && item.item_name.length >= 2 && (
-                                <div className="flex flex-wrap gap-1 pt-0.5">
-                                  {inventory
-                                    .filter(inv => inv.name.toLowerCase().includes(item.item_name.toLowerCase()))
-                                    .slice(0, 2)
-                                    .map(inv => (
-                                      <button
-                                        type="button"
-                                        key={inv.id}
-                                        onClick={() => handleSelectInventoryItem(idx, inv)}
-                                        className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors"
-                                      >
-                                        Use: {inv.name} (₹{inv.unit_cost})
-                                      </button>
-                                    ))}
-                                </div>
-                              )}
+                              {/* Per-Item Destination / Branch Slicer Pills */}
+                              <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                                <span className="text-[10px] font-bold text-slate-500">Branch:</span>
+                                {locations.map(loc => {
+                                  const itemBranchList = (item.location || selectedBranches.join(', ')).split(', ').map(s => s.trim());
+                                  const isChecked = itemBranchList.includes(loc.name);
+                                  return (
+                                    <button
+                                      type="button"
+                                      key={loc.id}
+                                      onClick={() => toggleItemBranch(idx, loc.name)}
+                                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border transition-all flex items-center gap-1 ${
+                                        isChecked
+                                          ? 'bg-indigo-600 text-white border-indigo-700 shadow-2xs'
+                                          : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+                                      }`}
+                                    >
+                                      <span>{isChecked ? '✓' : '+'}</span>
+                                      <span>{loc.name}</span>
+                                    </button>
+                                  );
+                                })}
+                                {locations.length === 0 && (
+                                  <span className="text-[10px] text-slate-400">Central Warehouse</span>
+                                )}
+                              </div>
 
                               {/* Statutory Tax Flow Badge */}
                               <div className="flex items-center gap-1.5 flex-wrap pt-0.5">

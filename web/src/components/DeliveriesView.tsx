@@ -10,7 +10,11 @@ import {
   ArrowRight,
   Package,
   Image as ImageIcon,
-  ZoomIn
+  ZoomIn,
+  Calendar,
+  Building,
+  Layers,
+  Filter
 } from 'lucide-react';
 import { PurchaseOrder, PurchaseOrderItem, User } from '../types';
 import { supabase } from '../lib/supabase';
@@ -32,10 +36,68 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [viewingDressImage, setViewingDressImage] = useState<{ url: string; title: string } | null>(null);
 
-  // Filter only orders that need receiving or are received
-  const deliveryOrders = orders.filter(o => 
-    o.status === 'ISSUED' || o.status === 'PARTIALLY_RECEIVED' || o.status === 'RECEIVED'
-  );
+  // Filters & Slicers
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedSupplier, setSelectedSupplier] = useState<string>('ALL');
+  const [selectedDepartment, setSelectedDepartment] = useState<string>('ALL');
+  const [selectedCreatedDate, setSelectedCreatedDate] = useState<string>('');
+
+  // Extract unique suppliers and departments across orders & line items
+  const supplierOptions = Array.from(new Set(orders.map(o => o.supplier_name).filter(Boolean))).sort();
+  
+  const departmentOptions = Array.from(new Set(
+    orders.flatMap(o => (o.items || []).map(i => i.department).concat([o.department || ''])).filter(Boolean)
+  )).sort();
+
+  // Filter only orders that need receiving or are received, matching slicers
+  const deliveryOrders = orders.filter(o => {
+    const isDeliveryStatus = o.status === 'ISSUED' || o.status === 'PARTIALLY_RECEIVED' || o.status === 'RECEIVED';
+    if (!isDeliveryStatus) return false;
+
+    // Search query: PO#, supplier, destination, notes
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchPO = o.po_number.toLowerCase().includes(q);
+      const matchSupp = o.supplier_name.toLowerCase().includes(q);
+      const matchDest = (o.location || '').toLowerCase().includes(q);
+      const matchNotes = (o.notes || '').toLowerCase().includes(q);
+      const matchItems = (o.items || []).some(i => i.item_name.toLowerCase().includes(q) || (i.department || '').toLowerCase().includes(q));
+      if (!matchPO && !matchSupp && !matchDest && !matchNotes && !matchItems) return false;
+    }
+
+    // Supplier slicer
+    if (selectedSupplier !== 'ALL' && o.supplier_name !== selectedSupplier) {
+      return false;
+    }
+
+    // Department slicer: matches order department or any line item department
+    if (selectedDepartment !== 'ALL') {
+      const dept = selectedDepartment.toLowerCase();
+      const matchesOrderDept = (o.department || '').toLowerCase() === dept;
+      const matchesItemDept = (o.items || []).some(i => (i.department || '').toLowerCase() === dept);
+      if (!matchesOrderDept && !matchesItemDept) return false;
+    }
+
+    // Created Date filter (YYYY-MM-DD from order_date_millis or created_at)
+    if (selectedCreatedDate) {
+      const orderDateIso = new Date(Number(o.order_date_millis)).toISOString().split('T')[0];
+      const createdDateIso = o.created_at ? new Date(o.created_at).toISOString().split('T')[0] : '';
+      if (orderDateIso !== selectedCreatedDate && createdDateIso !== selectedCreatedDate) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setSelectedSupplier('ALL');
+    setSelectedDepartment('ALL');
+    setSelectedCreatedDate('');
+  };
+
+  const hasActiveFilters = searchQuery || selectedSupplier !== 'ALL' || selectedDepartment !== 'ALL' || selectedCreatedDate;
 
   const openReceivingModal = async (order: PurchaseOrder) => {
     setSelectedOrder(order);
@@ -102,13 +164,106 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
         </div>
       </div>
 
+      {/* Deliveries Filters & Slicers Bar */}
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80 space-y-3">
+        <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+            <Filter className="w-4 h-4 text-indigo-600" />
+            <span>Search &amp; Slicers</span>
+            <span className="text-[11px] font-normal text-slate-400">({deliveryOrders.length} orders found)</span>
+          </div>
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="text-xs font-semibold text-rose-600 hover:text-rose-700 hover:underline flex items-center gap-1"
+            >
+              <X className="w-3.5 h-3.5" /> Reset Slicers
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+          {/* Slicer 1: Search Query */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-1">Search Keywords</label>
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="PO#, items, notes..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
+          {/* Slicer 2: PO Created Date Slicer */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-1 flex items-center gap-1">
+              <Calendar className="w-3 h-3 text-indigo-600" /> PO Created Date
+            </label>
+            <input
+              type="date"
+              value={selectedCreatedDate}
+              onChange={(e) => setSelectedCreatedDate(e.target.value)}
+              className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+            />
+          </div>
+
+          {/* Slicer 3: Supplier Slicer */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-1 flex items-center gap-1">
+              <Building className="w-3 h-3 text-indigo-600" /> Supplier Slicer
+            </label>
+            <select
+              value={selectedSupplier}
+              onChange={(e) => setSelectedSupplier(e.target.value)}
+              className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+            >
+              <option value="ALL">All Suppliers ({supplierOptions.length})</option>
+              {supplierOptions.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Slicer 4: Department Slicer */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-1 flex items-center gap-1">
+              <Layers className="w-3 h-3 text-indigo-600" /> Department Slicer
+            </label>
+            <select
+              value={selectedDepartment}
+              onChange={(e) => setSelectedDepartment(e.target.value)}
+              className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+            >
+              <option value="ALL">All Departments ({departmentOptions.length})</option>
+              {departmentOptions.map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
       {/* Deliveries Table */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
         {deliveryOrders.length === 0 ? (
           <div className="py-16 text-center text-slate-400">
             <Truck className="w-12 h-12 mx-auto text-slate-300 mb-3" />
-            <p className="text-base font-semibold text-slate-700">No active deliveries pending</p>
-            <p className="text-xs text-slate-400 mt-1">Issue a purchase order first to begin delivery tracking</p>
+            <p className="text-base font-semibold text-slate-700">No matching deliveries found</p>
+            <p className="text-xs text-slate-400 mt-1">
+              {hasActiveFilters ? 'Try adjusting your slicers or date filters' : 'Issue a purchase order first to begin delivery tracking'}
+            </p>
+            {hasActiveFilters && (
+              <button
+                onClick={clearFilters}
+                className="mt-3 px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors"
+              >
+                Clear all filters
+              </button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -116,7 +271,9 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
               <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase font-bold text-slate-500">
                 <tr>
                   <th className="py-3.5 px-4">PO Number</th>
+                  <th className="py-3.5 px-4">Created Date</th>
                   <th className="py-3.5 px-4">Supplier</th>
+                  <th className="py-3.5 px-4">Departments</th>
                   <th className="py-3.5 px-4">Expected Date</th>
                   <th className="py-3.5 px-4">Destination</th>
                   <th className="py-3.5 px-4">Delivery Status</th>
@@ -125,16 +282,39 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {deliveryOrders.map(order => {
+                  const createdDate = order.order_date_millis 
+                    ? new Date(Number(order.order_date_millis)).toLocaleDateString('en-IN')
+                    : (order.created_at ? new Date(order.created_at).toLocaleDateString('en-IN') : '-');
                   const expectedDate = new Date(Number(order.expected_delivery_date_millis));
                   const isOverdue = expectedDate.getTime() < Date.now() && order.status !== 'RECEIVED';
+
+                  const orderDepts = Array.from(new Set(
+                    (order.items || []).map(i => i.department).concat([order.department || '']).filter(Boolean)
+                  ));
 
                   return (
                     <tr key={order.id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="py-3.5 px-4 font-bold text-indigo-600">
                         {order.po_number}
                       </td>
+                      <td className="py-3.5 px-4 text-xs font-semibold text-slate-700">
+                        {createdDate}
+                      </td>
                       <td className="py-3.5 px-4 font-medium text-slate-800">
                         {order.supplier_name}
+                      </td>
+                      <td className="py-3.5 px-4 text-xs">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {orderDepts.length > 0 ? (
+                            orderDepts.map(d => (
+                              <span key={d} className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-medium text-[11px] border border-slate-200">
+                                {d}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-slate-400 italic text-[11px]">General</span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3.5 px-4 text-xs">
                         <span className={isOverdue ? 'text-rose-600 font-bold' : 'text-slate-600'}>
