@@ -15,11 +15,16 @@ import {
   Image as ImageIcon,
   Camera,
   Loader2,
-  ZoomIn
+  ZoomIn,
+  Download,
+  Share2,
+  MessageCircle
 } from 'lucide-react';
 import { PurchaseOrder, PurchaseOrderItem, Supplier, Location, InventoryItem, CompanyProfile, User, TaxRule } from '../types';
 import { supabase, uploadPoAttachment } from '../lib/supabase';
 import { calculateTaxRate, getTaxFlowBadge } from '../lib/taxMaster';
+import { downloadPurchaseOrderPDF } from '../lib/pdfGenerator';
+import { sharePurchaseOrderOnWhatsApp } from '../lib/whatsappShare';
 import { CameraCaptureDialog } from './CameraCaptureDialog';
 
 interface PurchaseOrdersViewProps {
@@ -75,6 +80,36 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
 
   // Full-size image preview viewer modal
   const [viewingImageModalUrl, setViewingImageModalUrl] = useState<{ url: string; title: string } | null>(null);
+
+  // WhatsApp phone confirmation dialog state
+  const [whatsAppModalPO, setWhatsAppModalPO] = useState<PurchaseOrder | null>(null);
+  const [whatsAppPhoneInput, setWhatsAppPhoneInput] = useState('');
+  const [isSharingWhatsApp, setIsSharingWhatsApp] = useState(false);
+
+  const handleOpenWhatsAppShare = (po: PurchaseOrder) => {
+    const supp = suppliers.find(s => s.id === po.supplier_id || s.name.toLowerCase() === po.supplier_name.toLowerCase());
+    setWhatsAppPhoneInput(supp?.phone || '');
+    setWhatsAppModalPO(po);
+  };
+
+  const handleConfirmWhatsAppShare = async () => {
+    if (!whatsAppModalPO) return;
+    setIsSharingWhatsApp(true);
+    try {
+      const supp = suppliers.find(s => s.id === whatsAppModalPO.supplier_id || s.name.toLowerCase() === whatsAppModalPO.supplier_name.toLowerCase());
+      await sharePurchaseOrderOnWhatsApp(whatsAppModalPO, supp, companyProfile, whatsAppPhoneInput);
+      setWhatsAppModalPO(null);
+    } catch (err) {
+      console.error('Error sharing on WhatsApp:', err);
+    } finally {
+      setIsSharingWhatsApp(false);
+    }
+  };
+
+  const handleQuickDownloadPDF = (po: PurchaseOrder) => {
+    const supp = suppliers.find(s => s.id === po.supplier_id || s.name.toLowerCase() === po.supplier_name.toLowerCase());
+    downloadPurchaseOrderPDF(po, supp, companyProfile);
+  };
 
   // Line items for Create PO
   const [lineItems, setLineItems] = useState<Array<PurchaseOrderItem>>([
@@ -502,6 +537,20 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                       </td>
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleOpenWhatsAppShare(order)}
+                            title="Send PO on WhatsApp"
+                            className="p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors"
+                          >
+                            <MessageCircle className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleQuickDownloadPDF(order)}
+                            title="Download PDF"
+                            className="p-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
                           <button
                             onClick={() => setSelectedPOForView(order)}
                             title="View / Print PO"
@@ -1017,14 +1066,26 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
               <span className="text-sm font-bold text-slate-400">PURCHASE ORDER INVOICE</span>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => window.print()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm"
+                  onClick={() => handleOpenWhatsAppShare(selectedPOForView)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-colors"
                 >
-                  <Printer className="w-3.5 h-3.5" /> Print / Save PDF
+                  <MessageCircle className="w-3.5 h-3.5" /> Send on WhatsApp
+                </button>
+                <button
+                  onClick={() => handleQuickDownloadPDF(selectedPOForView)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-sm transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" /> Download PDF
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold shadow-sm transition-colors"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Print
                 </button>
                 <button
                   onClick={() => setSelectedPOForView(null)}
-                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg"
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg ml-1"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -1293,6 +1354,86 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                 alt={viewingImageModalUrl.title}
                 className="max-w-full max-h-[75vh] rounded-xl object-contain shadow-md"
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* WhatsApp Share Confirmation Modal */}
+      {whatsAppModalPO && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2 text-emerald-600 font-bold text-base">
+                <MessageCircle className="w-5 h-5" />
+                <span>Send PO on WhatsApp</span>
+              </div>
+              <button
+                onClick={() => setWhatsAppModalPO(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-sm text-slate-600">
+              <p>
+                Sending Purchase Order <strong className="text-slate-900">{whatsAppModalPO.po_number}</strong> to{' '}
+                <strong className="text-slate-900">{whatsAppModalPO.supplier_name}</strong>.
+              </p>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Supplier WhatsApp Number (optional for Web Share / device picker):
+                </label>
+                <div className="relative">
+                  <input
+                    type="tel"
+                    value={whatsAppPhoneInput}
+                    onChange={(e) => setWhatsAppPhoneInput(e.target.value)}
+                    placeholder="e.g. 9876543210 or +91 9876543210"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  On mobile devices, this opens native WhatsApp with the PDF document attached. On desktop, it downloads the PDF and opens WhatsApp Web with order summary pre-filled.
+                </p>
+              </div>
+
+              <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-100 text-xs text-emerald-800 space-y-1">
+                <div className="font-semibold">📄 Attached Order Summary:</div>
+                <div className="text-slate-600 text-[11px]">
+                  • Items: {whatsAppModalPO.items?.length || 1} item(s)<br />
+                  • Total Amount: ₹{Number(whatsAppModalPO.total_amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}<br />
+                  • Delivery: {whatsAppModalPO.location}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setWhatsAppModalPO(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSharingWhatsApp}
+                onClick={handleConfirmWhatsAppShare}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-md shadow-emerald-600/25 transition-all disabled:opacity-50"
+              >
+                {isSharingWhatsApp ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" /> Preparing PDF...
+                  </>
+                ) : (
+                  <>
+                    <MessageCircle className="w-4 h-4" /> Send Now
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
