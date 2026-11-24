@@ -6,7 +6,6 @@ import {
   Truck, 
   Package, 
   FolderTree,
-  BarChart3, 
   Settings, 
   LogOut, 
   Download,
@@ -120,12 +119,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       label: 'Store Hierarchy & Vendors',
       icon: FolderTree,
       visible: isAdmin || currentUser?.show_inventory === true,
-    },
-    {
-      id: 'reports',
-      label: 'Spend & Reports',
-      icon: BarChart3,
-      visible: isAdmin || currentUser?.show_report === true,
     },
     {
       id: 'settings',

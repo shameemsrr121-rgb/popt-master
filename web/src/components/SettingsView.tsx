@@ -491,10 +491,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700">PO</span>
                           )}
                           {u.show_inventory && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">Inv</span>
-                          )}
-                          {u.show_report && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700">Reports</span>
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">Hierarchy</span>
                           )}
                           {u.show_margin && (
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700">Margin</span>
@@ -581,8 +578,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <div className="space-y-2 bg-slate-50 rounded-xl p-3 border border-slate-200">
                   {([
                     { label: 'Purchase Orders & Procurement', checked: modProcurement, onChange: setModProcurement, id: 'mod_proc' },
-                    { label: 'Inventory & Supplier Directory', checked: modInventory, onChange: setModInventory, id: 'mod_inv' },
-                    { label: 'Spend & Reports', checked: modReport, onChange: setModReport, id: 'mod_rep' },
+                    { label: 'Store Hierarchy & Supplier Directory', checked: modInventory, onChange: setModInventory, id: 'mod_inv' },
                     { label: 'Margin / Cost Analysis', checked: modMargin, onChange: setModMargin, id: 'mod_margin' },
                     { label: 'Google Sheets Export', checked: modGSheets, onChange: setModGSheets, id: 'mod_gsh' },
                     { label: 'Can Delete Purchase Orders', checked: modCanDeletePO, onChange: setModCanDeletePO, id: 'mod_delpo' },

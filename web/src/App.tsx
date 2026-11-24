@@ -16,7 +16,6 @@ import { PurchaseOrdersView } from './components/PurchaseOrdersView';
 import { TripPlannerView } from './components/TripPlannerView';
 import { DeliveriesView } from './components/DeliveriesView';
 import { InventorySuppliersView } from './components/InventorySuppliersView';
-import { ReportsView } from './components/ReportsView';
 import { SettingsView } from './components/SettingsView';
 import { LoginScreen } from './components/LoginScreen';
 
@@ -134,7 +133,6 @@ export function App() {
     planner: true,
     deliveries: isAdmin || !!currentUser?.show_procurement,
     inventory: isAdmin || !!currentUser?.show_inventory,
-    reports: isAdmin || !!currentUser?.show_report,
     settings: isAdmin || !!currentUser?.show_admin_panel,
   };
 
@@ -227,13 +225,6 @@ export function App() {
             suppliers={suppliers}
             onRefresh={fetchData}
             currentUser={currentUser}
-          />
-        )}
-
-        {currentTab === 'reports' && (
-          <ReportsView
-            orders={orders}
-            suppliers={suppliers}
           />
         )}
 
