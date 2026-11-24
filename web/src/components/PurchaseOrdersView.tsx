@@ -518,8 +518,11 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
       alert('Please select a supplier');
       return;
     }
-    if (lineItems.some(item => !item.item_name || item.quantity_ordered <= 0)) {
-      alert('Please fill out all line item details with valid quantities');
+    const invalidItemIndex = lineItems.findIndex(
+      item => !item.item_name || !item.item_name.trim() || Number(item.quantity_ordered) <= 0
+    );
+    if (invalidItemIndex !== -1) {
+      alert(`Item #${invalidItemIndex + 1} is missing an "Item Description". Please enter a name or description for each product line item.`);
       return;
     }
 
@@ -1318,7 +1321,7 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                                   type="text"
                                   list={`dept-list-${idx}`}
                                   placeholder="Select or type department..."
-                                  value={item.department || selectedDepartment || ''}
+                                  value={item.department ?? ''}
                                   onChange={(e) => handleItemDepartmentChange(idx, e.target.value)}
                                   className="px-2 py-1 bg-white border border-slate-300 rounded-md text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-36"
                                 />
