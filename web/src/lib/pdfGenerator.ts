@@ -181,10 +181,6 @@ export function generatePurchaseOrderPDF(
   doc.setTextColor(100, 116, 139);
 
   let shipY = currentY + 15;
-  if (po.payment_terms || supplier?.payment_terms) {
-    doc.text(`Payment Terms: ${po.payment_terms || supplier?.payment_terms}`, shipBoxX + 4, shipY);
-    shipY += 3.8;
-  }
   if (po.created_by) {
     doc.text(`Created By: ${po.created_by}`, shipBoxX + 4, shipY);
     shipY += 3.8;
