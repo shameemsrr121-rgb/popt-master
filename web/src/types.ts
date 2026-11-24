@@ -126,6 +126,10 @@ export interface PurchaseOrder {
   notes: string;
   photo_uri?: string | null;
   location: string;
+  selectedLocations?: string[];
+  department?: string;
+  division?: string;
+  section?: string;
   created_by: string;
   created_at?: string;
   items?: PurchaseOrderItem[];

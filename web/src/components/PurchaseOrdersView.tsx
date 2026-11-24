@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Plus, 
   Search, 
@@ -18,13 +18,17 @@ import {
   ZoomIn,
   Download,
   Share2,
-  MessageCircle
+  MessageCircle,
+  CheckSquare,
+  Square,
+  Sparkles
 } from 'lucide-react';
-import { PurchaseOrder, PurchaseOrderItem, Supplier, Location, InventoryItem, CompanyProfile, User, TaxRule } from '../types';
+import { PurchaseOrder, PurchaseOrderItem, Supplier, Location, InventoryItem, CompanyProfile, User, TaxRule, StoreHierarchyItem } from '../types';
 import { supabase, uploadPoAttachment } from '../lib/supabase';
 import { calculateTaxRate, getTaxFlowBadge } from '../lib/taxMaster';
 import { downloadPurchaseOrderPDF } from '../lib/pdfGenerator';
 import { sharePurchaseOrderOnWhatsApp } from '../lib/whatsappShare';
+import { getStoreHierarchy } from '../lib/storeHierarchy';
 import { CameraCaptureDialog } from './CameraCaptureDialog';
 
 interface PurchaseOrdersViewProps {
@@ -64,13 +68,122 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
   const [deliveryDate, setDeliveryDate] = useState(
     new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
   );
-  const [locationName, setLocationName] = useState('Central Warehouse');
+  
+  // Store Hierarchy State & Department auto-lookup
+  const [hierarchyList, setHierarchyList] = useState<StoreHierarchyItem[]>([]);
+  const [selectedDepartment, setSelectedDepartment] = useState('');
+  const [autoDivision, setAutoDivision] = useState('');
+  const [autoSection, setAutoSection] = useState('');
+  const [autoTaxType, setAutoTaxType] = useState<'Textile' | 'Readymade'>('Readymade');
+  
+  // Multi-branch selection
+  const [selectedBranches, setSelectedBranches] = useState<string[]>(['Central Warehouse']);
+
   const [notes, setNotes] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileUploadInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Load hierarchy list
+  useEffect(() => {
+    getStoreHierarchy().then(data => {
+      if (Array.isArray(data)) {
+        setHierarchyList(data);
+      }
+    });
+  }, []);
+
+  // Sync initial branches if locations change
+  useEffect(() => {
+    if (locations.length > 0 && selectedBranches.length === 0) {
+      setSelectedBranches([locations[0].name]);
+    }
+  }, [locations]);
+
+  // Handle department change & auto-populate division, section, tax type
+  const handleDepartmentChange = (deptName: string) => {
+    setSelectedDepartment(deptName);
+    const trimmedDept = deptName.trim().toLowerCase();
+    
+    // Look up in hierarchy
+    let match = hierarchyList.find(h => h.department.trim().toLowerCase() === trimmedDept);
+    
+    // Fallback: look up in inventory
+    if (!match) {
+      const invMatch = inventory.find(i => (i.department || '').trim().toLowerCase() === trimmedDept);
+      if (invMatch) {
+        match = {
+          department: invMatch.department,
+          division: invMatch.division || 'Readymade',
+          section: invMatch.section || 'General',
+          type: invMatch.type || (invMatch.category === 'Textile' ? 'Textile' : 'Readymade')
+        };
+      }
+    }
+
+    if (match) {
+      setAutoDivision(match.division);
+      setAutoSection(match.section);
+      setAutoTaxType(match.type);
+
+      // Update all line items with this department & auto-looked up hierarchy
+      setLineItems(prevItems => 
+        prevItems.map((item, idx) => {
+          const calcResult = calculateTaxRate({
+            itemName: item.item_name,
+            category: match!.division,
+            division: match!.division,
+            department: match!.department,
+            section: match!.section,
+            type: match!.type,
+            unitCost: Number(item.unit_price) || 0,
+            customRules: taxRules
+          });
+          const taxRate = customTaxOverrides[idx] ? item.tax_percent : calcResult.rate;
+          const taxable = Number(item.quantity_ordered || 0) * Number(item.unit_price || 0);
+          const tax = taxable * (taxRate / 100);
+          return {
+            ...item,
+            department: match!.department,
+            division: match!.division,
+            section: match!.section,
+            tax_percent: taxRate,
+            taxable_amount: taxable,
+            tax_amount: tax,
+            total_price: taxable + tax
+          };
+        })
+      );
+    } else {
+      // If user typed a brand new department not in hierarchy yet
+      if (deptName) {
+        setAutoDivision('Readymade');
+        setAutoSection('General');
+        setAutoTaxType('Readymade');
+      }
+    }
+  };
+
+  const toggleBranchSelection = (branchName: string) => {
+    if (selectedBranches.includes(branchName)) {
+      if (selectedBranches.length === 1) {
+        alert('At least one branch / warehouse must be selected');
+        return;
+      }
+      setSelectedBranches(selectedBranches.filter(b => b !== branchName));
+    } else {
+      setSelectedBranches([...selectedBranches, branchName]);
+    }
+  };
+
+  const selectAllBranches = () => {
+    const allNames = locations.map(l => l.name);
+    if (allNames.length > 0) {
+      setSelectedBranches(allNames);
+    }
+  };
 
   // Line item camera & photo upload state
   const [activeItemCameraIndex, setActiveItemCameraIndex] = useState<number | null>(null);
@@ -135,6 +248,23 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
   ]);
 
   const addLineItem = () => {
+    const defaultDept = selectedDepartment || 'General';
+    const defaultDiv = autoDivision || 'Readymade';
+    const defaultSec = autoSection || 'Main Store';
+    const defaultType = autoTaxType || 'Readymade';
+    const defaultLoc = selectedBranches.join(', ') || 'Central Warehouse';
+
+    const defaultTaxResult = calculateTaxRate({
+      itemName: '',
+      category: defaultDiv,
+      division: defaultDiv,
+      department: defaultDept,
+      section: defaultSec,
+      type: defaultType,
+      unitCost: 0,
+      customRules: taxRules
+    });
+
     setLineItems([
       ...lineItems,
       {
@@ -143,11 +273,18 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
         quantity_ordered: 1,
         quantity_received: 0,
         unit_price: 0,
-        tax_percent: 5.0,
+        tax_percent: defaultTaxResult.rate,
         taxable_amount: 0,
         tax_amount: 0,
         total_price: 0,
-        location: locationName
+        location: defaultLoc,
+        department: defaultDept,
+        division: defaultDiv,
+        section: defaultSec,
+        c1_brand: '',
+        c2_size: '',
+        c3_design: '',
+        c4_colour: ''
       }
     ]);
   };
@@ -300,6 +437,7 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
       const grandTotal = calculateGrandTotal();
 
       // 1. Insert Purchase Order
+      const finalBranches = selectedBranches.length > 0 ? selectedBranches.join(', ') : 'Central Warehouse';
       const { data: poData, error: poError } = await supabase
         .from('purchase_orders')
         .insert({
@@ -315,7 +453,10 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
           total_amount: grandTotal,
           notes: notes,
           photo_uri: uploadedPhotoUrl,
-          location: locationName,
+          location: finalBranches,
+          department: selectedDepartment || undefined,
+          division: autoDivision || undefined,
+          section: autoSection || undefined,
           created_by: currentUser?.full_name || currentUser?.username || 'Web Portal'
         })
         .select()
@@ -339,10 +480,10 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
         tax_amount: item.tax_amount,
         total_price: item.total_price,
         photo_uri: item.photo_uri || null,
-        location: item.location || locationName,
-        division: item.division || 'Readymade',
-        section: item.section || 'Main Store',
-        department: item.department || 'General',
+        location: item.location || finalBranches,
+        division: item.division || autoDivision || 'Readymade',
+        section: item.section || autoSection || 'Main Store',
+        department: item.department || selectedDepartment || 'General',
         c1_brand: item.c1_brand || '',
         c2_size: item.c2_size || '',
         c3_design: item.c3_design || '',
@@ -596,86 +737,179 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
             </div>
 
             <form onSubmit={handleCreatePO} className="mt-5 space-y-6">
-              {/* Top metadata fields */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                {/* Supplier */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Supplier / Vendor *</label>
-                  <select
-                    value={supplierId}
-                    onChange={(e) => setSupplierId(Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    required
-                  >
-                    <option value="">Select Supplier</option>
-                    {suppliers.map(s => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
-                    ))}
-                  </select>
+              {/* Order of Input: Step 1 (Supplier), Step 2 (Department with auto Division & Section), Step 3 (Multi-Branch Selection) */}
+              <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {/* Step 1: Supplier / Vendor */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center gap-1.5">
+                      <span className="w-4 h-4 rounded-full bg-indigo-600 text-white inline-flex items-center justify-center text-[10px]">1</span>
+                      Supplier / Vendor *
+                    </label>
+                    <select
+                      value={supplierId}
+                      onChange={(e) => setSupplierId(Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                      required
+                    >
+                      <option value="">-- Choose Supplier --</option>
+                      {suppliers.map(s => (
+                        <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Step 2: Department (Auto-inserts Division & Section!) */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center gap-1.5">
+                      <span className="w-4 h-4 rounded-full bg-indigo-600 text-white inline-flex items-center justify-center text-[10px]">2</span>
+                      Department * (Auto-Hierarchy)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        list="dept-options-list"
+                        placeholder="Type or select Department..."
+                        value={selectedDepartment}
+                        onChange={(e) => handleDepartmentChange(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                        required
+                      />
+                      <datalist id="dept-options-list">
+                        {Array.from(new Set(hierarchyList.map(h => h.department).concat(inventory.map(i => i.department).filter(Boolean)))).map(dept => (
+                          <option key={dept} value={dept} />
+                        ))}
+                      </datalist>
+                    </div>
+
+                    {/* Auto-populated Hierarchy badge */}
+                    <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                      {autoDivision || autoSection ? (
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-bold">
+                          <Sparkles className="w-3 h-3 text-emerald-600" />
+                          <span>Auto: {autoDivision || 'MENS'} &gt; {autoSection || 'FORMALS'} ({autoTaxType})</span>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-slate-400">
+                          ⚡ Enter department &rarr; Division, Section &amp; Tax auto-fill!
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Expected Delivery Date */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Expected Delivery *</label>
+                    <input
+                      type="date"
+                      value={deliveryDate}
+                      onChange={(e) => setDeliveryDate(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                      required
+                    />
+                  </div>
                 </div>
 
-                {/* Delivery Date */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Expected Delivery *</label>
-                  <input
-                    type="date"
-                    value={deliveryDate}
-                    onChange={(e) => setDeliveryDate(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    required
-                  />
-                </div>
+                {/* Step 3: Multi-Branch Selection */}
+                <div className="pt-2 border-t border-slate-200/60">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <span className="w-4 h-4 rounded-full bg-indigo-600 text-white inline-flex items-center justify-center text-[10px]">3</span>
+                      Destination Branches (Multi-Branch Selection) *
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={selectAllBranches}
+                        className="text-[11px] text-indigo-600 font-semibold hover:underline"
+                      >
+                        Select All
+                      </button>
+                      <span className="text-slate-300">|</span>
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        {selectedBranches.length} branch(es) chosen
+                      </span>
+                    </div>
+                  </div>
 
-                {/* Target Location */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Receiving Warehouse</label>
-                  <select
-                    value={locationName}
-                    onChange={(e) => setLocationName(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    {locations.map(loc => (
-                      <option key={loc.id} value={loc.name}>{loc.name}</option>
-                    ))}
-                  </select>
+                  {/* Multi-Branch Checkboxes / Selection Pills */}
+                  <div className="flex flex-wrap gap-2">
+                    {locations.map(loc => {
+                      const isSelected = selectedBranches.includes(loc.name);
+                      return (
+                        <button
+                          type="button"
+                          key={loc.id}
+                          onClick={() => toggleBranchSelection(loc.name)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                            isSelected
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="w-3.5 h-3.5 text-white" />
+                          ) : (
+                            <Square className="w-3.5 h-3.5 text-slate-400" />
+                          )}
+                          <span>{loc.name}</span>
+                        </button>
+                      );
+                    })}
+                    {locations.length === 0 && (
+                      <span className="text-xs text-slate-400">Defaulting to Central Warehouse</span>
+                    )}
+                  </div>
                 </div>
               </div>
 
               {/* Line Items Editor */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-slate-800">Order Items</h3>
-                  <button
-                    type="button"
-                    onClick={addLineItem}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-xs font-semibold"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Add Item
-                  </button>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                      <span className="w-4 h-4 rounded-full bg-indigo-600 text-white inline-flex items-center justify-center text-[10px]">4</span>
+                      PO Product Line Items ({lineItems.length})
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Qty &amp; Amount are mandatory. Design &amp; Size are optional. Add as many products as needed.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={addLineItem}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all active:scale-[0.98]"
+                    >
+                      <Plus className="w-4 h-4" /> Add Product to PO
+                    </button>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto border border-slate-200 rounded-2xl">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-slate-50 border-b border-slate-200 font-bold text-slate-600">
                       <tr>
-                        <th className="p-3 w-24">Dress Photo</th>
-                        <th className="p-3 min-w-[220px]">Item Description &amp; Tax Flow *</th>
+                        <th className="p-3 w-20">Dress Photo</th>
+                        <th className="p-3 min-w-[200px]">Item Description &amp; Dept</th>
+                        <th className="p-3 w-24">Design (Opt)</th>
+                        <th className="p-3 w-20">Size (Opt)</th>
                         <th className="p-3 w-20">Qty *</th>
-                        <th className="p-3 w-28">Unit Price (₹)</th>
-                        <th className="p-3 w-24">GST %</th>
+                        <th className="p-3 w-28">Amount / Price (₹) *</th>
+                        <th className="p-3 w-20">GST %</th>
                         <th className="p-3 text-right">Taxable</th>
                         <th className="p-3 text-right">Total (₹)</th>
-                        <th className="p-3 w-10"></th>
+                        <th className="p-3 w-8"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {lineItems.map((item, idx) => {
                         const taxBadgeInfo = getTaxFlowBadge({
                           itemName: item.item_name,
-                          category: item.division,
-                          division: item.division,
-                          department: item.department,
-                          section: item.section,
+                          category: item.division || autoDivision,
+                          division: item.division || autoDivision,
+                          department: item.department || selectedDepartment,
+                          section: item.section || autoSection,
                           unitCost: Number(item.unit_price) || 0,
                           customRules: taxRules
                         });
@@ -728,12 +962,12 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                                   </div>
                                 </div>
                               ) : (
-                                <div className="flex flex-col gap-1 w-20">
+                                <div className="flex flex-col gap-1 w-16">
                                   <button
                                     type="button"
                                     onClick={() => setActiveItemCameraIndex(idx)}
                                     title="Snap live camera photo of this dress"
-                                    className="inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-bold border border-indigo-200/80 transition-colors shadow-2xs"
+                                    className="inline-flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold border border-indigo-200/80 transition-colors shadow-2xs"
                                   >
                                     <Camera className="w-3 h-3 shrink-0" />
                                     <span>Snap</span>
@@ -742,7 +976,7 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                                     type="button"
                                     onClick={() => handleTriggerItemFileInput(idx)}
                                     title="Upload picture from gallery / file"
-                                    className="inline-flex items-center justify-center gap-1 px-1.5 py-1 rounded-md bg-slate-50 hover:bg-slate-100 text-slate-600 text-[10px] font-medium border border-slate-200 transition-colors"
+                                    className="inline-flex items-center justify-center gap-1 px-1.5 py-1 rounded-md bg-slate-50 hover:bg-slate-100 text-slate-600 text-[9px] font-medium border border-slate-200 transition-colors"
                                   >
                                     <Upload className="w-2.5 h-2.5 shrink-0" />
                                     <span>Upload</span>
@@ -750,22 +984,36 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                                 </div>
                               )}
                             </td>
+
+                            {/* Item Name & Auto-Hierarchy badge */}
                             <td className="p-2 space-y-1">
                               <input
                                 type="text"
-                                placeholder="e.g. Silk Saree, Cotton Shirt, Linen..."
+                                placeholder="e.g. Silk Saree, Cotton Shirt, Kurta..."
                                 value={item.item_name}
                                 onChange={(e) => updateLineItem(idx, { item_name: e.target.value })}
-                                className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium focus:ring-1 focus:ring-indigo-500"
+                                className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:ring-1 focus:ring-indigo-500"
                                 required
                               />
+
+                              {/* Department & Division & Section badge */}
+                              <div className="flex items-center gap-1 flex-wrap">
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                                  📁 {item.department || selectedDepartment || 'General'}
+                                  {(item.division || autoDivision) && (
+                                    <span className="text-slate-400 ml-1">
+                                      ({item.division || autoDivision} &gt; {item.section || autoSection || 'Main Store'})
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
 
                               {/* Inventory Quick Match if available */}
                               {inventory.length > 0 && !item.inventory_item_id && item.item_name.length >= 2 && (
                                 <div className="flex flex-wrap gap-1 pt-0.5">
                                   {inventory
                                     .filter(inv => inv.name.toLowerCase().includes(item.item_name.toLowerCase()))
-                                    .slice(0, 3)
+                                    .slice(0, 2)
                                     .map(inv => (
                                       <button
                                         type="button"
@@ -782,12 +1030,12 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                               {/* Statutory Tax Flow Badge */}
                               <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
                                 {isOverridden ? (
-                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                                    ⚙️ Manual {item.tax_percent}% GST (Overridden)
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                    ⚙️ Manual {item.tax_percent}% GST
                                   </span>
                                 ) : (
                                   <span
-                                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border shadow-xs transition-colors ${
+                                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold border shadow-xs transition-colors ${
                                       taxBadgeInfo.isTextile
                                         ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
                                         : taxBadgeInfo.isHighSlab
@@ -800,41 +1048,70 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                                 )}
                               </div>
                             </td>
+
+                            {/* Design (Optional / Not mandatory) */}
+                            <td className="p-2">
+                              <input
+                                type="text"
+                                placeholder="Floral, Plain, Checks (Opt)"
+                                value={item.c3_design || ''}
+                                onChange={(e) => updateLineItem(idx, { c3_design: e.target.value })}
+                                className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                              />
+                            </td>
+
+                            {/* Size (Optional / Not mandatory) */}
+                            <td className="p-2">
+                              <input
+                                type="text"
+                                placeholder="M, L, XL, Free (Opt)"
+                                value={item.c2_size || ''}
+                                onChange={(e) => updateLineItem(idx, { c2_size: e.target.value })}
+                                className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                              />
+                            </td>
+
+                            {/* Qty (Mandatory) */}
                             <td className="p-2">
                               <input
                                 type="number"
                                 min="1"
                                 value={item.quantity_ordered}
                                 onChange={(e) => updateLineItem(idx, { quantity_ordered: Number(e.target.value) })}
-                                className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                                className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold"
                                 required
                               />
                             </td>
+
+                            {/* Unit Price / Amount (Mandatory) */}
                             <td className="p-2">
                               <input
                                 type="number"
                                 min="0"
                                 step="0.01"
+                                placeholder="Amount ₹"
                                 value={item.unit_price}
                                 onChange={(e) => updateLineItem(idx, { unit_price: Number(e.target.value) })}
-                                className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                                className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold"
                                 required
                               />
                             </td>
+
+                            {/* GST Rate */}
                             <td className="p-2">
-                              <div className="space-y-1">
+                              <div className="space-y-0.5">
                                 <select
                                   value={item.tax_percent}
                                   onChange={(e) => updateLineItem(idx, { tax_percent: Number(e.target.value) }, true)}
-                                  className={`w-full px-1.5 py-1.5 bg-white border rounded-lg text-xs font-bold ${
+                                  className={`w-full px-1 py-1.5 bg-white border rounded-lg text-[11px] font-bold ${
                                     isOverridden ? 'border-amber-400 text-amber-900 bg-amber-50/30' : 'border-slate-200 text-slate-800'
                                   }`}
                                 >
-                                  <option value="0">0% GST</option>
-                                  <option value="5">5% GST</option>
-                                  <option value="12">12% GST</option>
-                                  <option value="18">18% GST</option>
-                                  <option value="28">28% GST</option>
+                                  <option value="0">0%</option>
+                                  <option value="5">5%</option>
+                                  <option value="12">12%</option>
+                                  <option value="18">18%</option>
+                                  <option value="28">28%</option>
                                 </select>
                                 {isOverridden && (
                                   <button
@@ -849,17 +1126,23 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                                     }}
                                     className="text-[9px] text-indigo-600 hover:underline block"
                                   >
-                                    Reset to Auto
+                                    Auto
                                   </button>
                                 )}
                               </div>
                             </td>
+
+                            {/* Taxable */}
                             <td className="p-2 text-right font-medium text-slate-600 pt-3">
                               ₹{item.taxable_amount.toFixed(2)}
                             </td>
+
+                            {/* Total Amount */}
                             <td className="p-2 text-right font-bold text-slate-900 pt-3">
                               ₹{item.total_price.toFixed(2)}
                             </td>
+
+                            {/* Delete line item */}
                             <td className="p-2 text-center pt-3">
                               {lineItems.length > 1 && (
                                 <button
@@ -876,6 +1159,21 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                       })}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Prominent "+ Add Product to PO" button under the table */}
+                <div className="flex items-center justify-between pt-1">
+                  <button
+                    type="button"
+                    onClick={addLineItem}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs border border-indigo-200 transition-all hover:scale-[1.01]"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ Add Another Product to this PO</span>
+                  </button>
+                  <span className="text-xs text-slate-400 font-medium">
+                    Total Products: {lineItems.length}
+                  </span>
                 </div>
               </div>
 
@@ -1037,21 +1335,39 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
               </div>
 
               {/* Submit Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-between gap-3 pt-4 border-t border-slate-200">
                 <button
                   type="button"
-                  onClick={() => setIsCreateOpen(false)}
-                  className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100"
+                  onClick={addLineItem}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs border border-slate-300 transition-all"
                 >
-                  Cancel
+                  <Plus className="w-4 h-4 text-indigo-600" />
+                  <span>+ Add Product to PO</span>
                 </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-md shadow-indigo-600/30 transition-all disabled:opacity-50"
-                >
-                  {isSubmitting ? 'Issuing Order...' : 'Issue Purchase Order'}
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateOpen(false)}
+                    className="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-md shadow-indigo-600/30 transition-all disabled:opacity-50 hover:scale-[1.01]"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" /> Creating PO...
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" /> 🚀 Create Purchase Order
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -1125,11 +1441,26 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                 <div>
                   <div className="font-bold text-slate-400 uppercase tracking-wider mb-1">Vendor / Supplier:</div>
                   <div className="text-sm font-bold text-slate-900">{selectedPOForView.supplier_name}</div>
+                  {selectedPOForView.department && (
+                    <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 font-semibold text-[11px] border border-indigo-200">
+                      📁 Dept: {selectedPOForView.department}
+                      {selectedPOForView.division && ` (${selectedPOForView.division} > ${selectedPOForView.section || 'General'})`}
+                    </div>
+                  )}
                 </div>
                 <div>
-                  <div className="font-bold text-slate-400 uppercase tracking-wider mb-1">Deliver To:</div>
+                  <div className="font-bold text-slate-400 uppercase tracking-wider mb-1">Destination Branches / Deliver To:</div>
                   <div className="text-sm font-bold text-slate-900">{selectedPOForView.location}</div>
                   <div className="text-slate-600 mt-0.5">Created By: {selectedPOForView.created_by}</div>
+                  {selectedPOForView.location.includes(',') && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {selectedPOForView.location.split(',').map((branch, bi) => (
+                        <span key={bi} className="inline-block px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] font-semibold text-slate-700">
+                          📍 {branch.trim()}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1186,6 +1517,20 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                             </td>
                             <td className="p-2.5">
                               <span className="font-semibold text-slate-900">{item.item_name}</span>
+                              <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                {(item.c3_design || item.c2_size) && (
+                                  <span className="inline-block text-[10px] text-slate-500 font-medium">
+                                    {item.c3_design && `Design: ${item.c3_design}`}
+                                    {item.c3_design && item.c2_size && ' • '}
+                                    {item.c2_size && `Size: ${item.c2_size}`}
+                                  </span>
+                                )}
+                                {(item.department || item.division) && (
+                                  <span className="inline-block text-[10px] text-indigo-600 bg-indigo-50 px-1 py-0.2 rounded border border-indigo-100">
+                                    {item.department} {item.division ? `(${item.division})` : ''}
+                                  </span>
+                                )}
+                              </div>
                               <span className="inline-block mt-0.5 text-[10px] text-slate-400">
                                 CGST {halfRate}% + SGST {halfRate}%
                               </span>
