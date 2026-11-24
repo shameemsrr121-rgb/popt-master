@@ -528,7 +528,34 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
       const selectedSupplier = suppliers.find(s => s.id === Number(supplierId));
       const supplierName = selectedSupplier?.name || 'Selected Vendor';
 
-      const poNumber = `PO-${Date.now().toString().slice(-6)}`;
+      // Generate PO Number with format PO-DDMMYY-001 (auto-incrementing per day)
+      const now = new Date();
+      const dd = String(now.getDate()).padStart(2, '0');
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const yy = String(now.getFullYear()).slice(-2);
+      const prefix = `PO-${dd}${mm}${yy}-`;
+
+      let nextSeq = 1;
+      try {
+        const { data: existingPOs } = await supabase
+          .from('purchase_orders')
+          .select('po_number')
+          .like('po_number', `${prefix}%`);
+
+        if (existingPOs && existingPOs.length > 0) {
+          const numbers = existingPOs.map(p => {
+            const parts = (p.po_number || '').split('-');
+            const seqStr = parts[parts.length - 1];
+            const parsed = parseInt(seqStr, 10);
+            return isNaN(parsed) ? 0 : parsed;
+          });
+          nextSeq = Math.max(...numbers, 0) + 1;
+        }
+      } catch (err) {
+        console.warn('Could not query existing PO numbers, defaulting to sequence 1', err);
+      }
+
+      const poNumber = `${prefix}${String(nextSeq).padStart(3, '0')}`;
       const orderDateMillis = Date.now();
       const expectedDeliveryMillis = new Date(deliveryDate).getTime();
 
