@@ -493,27 +493,26 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
 
       // 1. Insert Purchase Order
       const finalBranches = selectedBranches.length > 0 ? selectedBranches.join(', ') : 'Central Warehouse';
-      const { data: poData, error: poError } = await supabase
+      const poPayload: Record<string, any> = {
+        po_number: poNumber,
+        supplier_id: Number(supplierId),
+        supplier_name: supplierName,
+        order_date_millis: orderDateMillis,
+        expected_delivery_date_millis: expectedDeliveryMillis,
+        payment_terms: '',
+        status: 'ISSUED',
+        subtotal: subtotal,
+        tax_amount: totalTax,
+        total_amount: grandTotal,
+        notes: notes,
+        photo_uri: null,
+        location: finalBranches,
+        created_by: currentUser?.full_name || currentUser?.username || 'Web Portal'
+      };
+
+      let { data: poData, error: poError } = await supabase
         .from('purchase_orders')
-        .insert({
-          po_number: poNumber,
-          supplier_id: Number(supplierId),
-          supplier_name: supplierName,
-          order_date_millis: orderDateMillis,
-          expected_delivery_date_millis: expectedDeliveryMillis,
-          payment_terms: '',
-          status: 'ISSUED',
-          subtotal: subtotal,
-          tax_amount: totalTax,
-          total_amount: grandTotal,
-          notes: notes,
-          photo_uri: null,
-          location: finalBranches,
-          department: selectedDepartment || undefined,
-          division: autoDivision || undefined,
-          section: autoSection || undefined,
-          created_by: currentUser?.full_name || currentUser?.username || 'Web Portal'
-        })
+        .insert(poPayload)
         .select()
         .single();
 
