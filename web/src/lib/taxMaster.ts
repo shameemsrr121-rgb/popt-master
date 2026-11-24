@@ -191,6 +191,8 @@ export function getTaxFlowBadge(params: {
 }): { badge: string; isTextile: boolean; isHighSlab: boolean; isCustom: boolean } {
   const result = calculateTaxRate(params);
   const cost = Number(params.unitCost) || 0;
+  const trimmedDiv = (params.division || '').trim();
+  const trimmedCat = (params.category || params.type || '').trim();
 
   if (result.ruleSource.startsWith('Custom Rule')) {
     return {
@@ -210,9 +212,12 @@ export function getTaxFlowBadge(params: {
     };
   }
 
+  const isTextile = result.ruleSource.includes('Textile');
+  const categoryLabel = trimmedDiv || trimmedCat || (isTextile ? 'Textile' : 'Readymade');
+
   if (cost >= 2500) {
     return {
-      badge: `⚡ Auto 18% (Apparel ≥ ₹2,500)`,
+      badge: `⚡ Auto 18% (${categoryLabel} ≥ ₹2,500)`,
       isTextile: false,
       isHighSlab: true,
       isCustom: false
@@ -220,7 +225,7 @@ export function getTaxFlowBadge(params: {
   }
 
   return {
-    badge: `⚡ Auto 5% (Apparel < ₹2,500)`,
+    badge: `⚡ Auto 5% (${categoryLabel} < ₹2,500)`,
     isTextile: false,
     isHighSlab: false,
     isCustom: false

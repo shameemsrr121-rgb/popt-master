@@ -929,7 +929,17 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleCreatePO} className="mt-5 space-y-6">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'TEXTAREA') {
+                  e.preventDefault();
+                }
+              }}
+              className="mt-5 space-y-6"
+            >
               {/* Order of Input: Step 1 (Supplier), Step 2 (Department with auto Division & Section), Step 3 (Multi-Branch Selection) */}
               <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80 space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -1563,7 +1573,8 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                     Cancel
                   </button>
                   <button
-                    type="submit"
+                    type="button"
+                    onClick={handleCreatePO}
                     disabled={isSubmitting}
                     className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-md shadow-indigo-600/30 transition-all disabled:opacity-50 hover:scale-[1.01]"
                   >
