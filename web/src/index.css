@@ -20,6 +20,20 @@
   }
   body {
     @apply bg-slate-50 text-slate-800 font-sans;
+    /* iOS Safari Notch & Dynamic Island Safe Area insets */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    /* Prevent iOS text inflation & tap highlight */
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* Ensure form inputs do not trigger iOS auto-zoom on focus by enforcing >= 16px font-size */
+  @media screen and (max-width: 768px) {
+    input, select, textarea {
+      font-size: 16px !important;
+    }
   }
 }
 

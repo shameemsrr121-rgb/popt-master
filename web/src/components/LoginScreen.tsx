@@ -8,40 +8,72 @@ interface LoginScreenProps {
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('admin123');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [loginAttempts, setLoginAttempts] = useState(0);
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Rate-limiting check: Prevent brute-force password guessing
+    if (lockoutUntil && Date.now() < lockoutUntil) {
+      const remainingSec = Math.ceil((lockoutUntil - Date.now()) / 1000);
+      setErrorMessage(`Too many failed attempts. Please wait ${remainingSec} seconds.`);
+      return;
+    }
+
     setIsLoading(true);
     setErrorMessage('');
 
     try {
+      const sanitizedUser = username.trim().toLowerCase();
+      const sanitizedPass = password.trim();
+
       const { data, error } = await supabase
         .from('users')
-        .select('*')
-        .eq('username', username.trim().toLowerCase())
+        .select('id, username, full_name, role, is_admin, show_procurement, show_inventory, show_admin_panel, password_hash')
+        .eq('username', sanitizedUser)
         .single();
 
       if (error || !data) {
-        setErrorMessage('User not found. Please verify your username.');
+        handleFailedAttempt();
         setIsLoading(false);
         return;
       }
 
-      if (data.password_hash !== password.trim()) {
-        setErrorMessage('Incorrect password. Please try again.');
+      if (data.password_hash !== sanitizedPass) {
+        handleFailedAttempt();
         setIsLoading(false);
         return;
       }
 
-      onLoginSuccess(data as User);
+      // Reset attempts on successful authentication
+      setLoginAttempts(0);
+      setLockoutUntil(null);
+
+      // Sanitize user object to never hold password_hash in memory
+      const safeUser = { ...data };
+      delete (safeUser as any).password_hash;
+
+      onLoginSuccess(safeUser as User);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Login failed. Please check network connectivity.');
+      setErrorMessage('Login failed. Please check network connectivity.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleFailedAttempt = () => {
+    const nextCount = loginAttempts + 1;
+    setLoginAttempts(nextCount);
+    if (nextCount >= 5) {
+      setLockoutUntil(Date.now() + 30000); // 30-second lockout
+      setErrorMessage('Too many failed attempts. Account locked for 30 seconds.');
+    } else {
+      setErrorMessage('Invalid username or password. Please try again.');
     }
   };
 
@@ -110,11 +142,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>
-
-        <div className="mt-6 pt-5 border-t border-slate-700/60 text-center">
-          <p className="text-xs text-slate-400">Default Admin Credentials:</p>
-          <p className="text-xs font-mono text-indigo-400 mt-0.5">Username: <b>admin</b> • Password: <b>admin123</b></p>
-        </div>
       </div>
     </div>
   );
