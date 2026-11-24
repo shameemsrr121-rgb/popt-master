@@ -327,7 +327,7 @@ export const TripPlannerView: React.FC<TripPlannerViewProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Destination Location</label>
                   <input
@@ -352,7 +352,7 @@ export const TripPlannerView: React.FC<TripPlannerViewProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">From Date *</label>
                   <input
@@ -374,7 +374,7 @@ export const TripPlannerView: React.FC<TripPlannerViewProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Estimated Budget (₹)</label>
                   <input

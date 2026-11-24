@@ -379,14 +379,14 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
               </p>
 
               <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-                <table className="w-full text-left text-xs">
+                <table className="w-full text-left text-xs min-w-[500px]">
                   <thead className="bg-slate-50 font-bold text-slate-700 border-b border-slate-200">
                     <tr>
                       <th className="p-3 w-16 text-center">Dress Photo</th>
-                      <th className="p-3">Item Description</th>
-                      <th className="p-3 text-center">Ordered</th>
-                      <th className="p-3 text-center">Received</th>
-                      <th className="p-3 text-center">Status</th>
+                      <th className="p-3 min-w-[140px]">Item Description</th>
+                      <th className="p-3 text-center min-w-[65px]">Ordered</th>
+                      <th className="p-3 text-center min-w-[85px]">Received</th>
+                      <th className="p-3 text-center min-w-[100px]">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
