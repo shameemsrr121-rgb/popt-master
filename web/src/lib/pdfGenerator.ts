@@ -2,10 +2,36 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { PurchaseOrder, Supplier, CompanyProfile } from '../types';
 
+/**
+ * Loads an image from URL or data URI and converts to base64 for jsPDF embedding
+ */
+export async function loadImageAsBase64(url?: string | null): Promise<string | null> {
+  if (!url || !url.trim()) return null;
+  const cleanUrl = url.trim();
+  if (cleanUrl.startsWith('data:image/')) return cleanUrl;
+
+  try {
+    const res = await fetch(cleanUrl, { mode: 'cors' });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        resolve(typeof reader.result === 'string' ? reader.result : null);
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
 export function generatePurchaseOrderPDF(
   po: PurchaseOrder,
   supplier?: Supplier,
-  company?: CompanyProfile | null
+  company?: CompanyProfile | null,
+  itemImages?: (string | null)[]
 ): jsPDF {
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -191,6 +217,8 @@ export function generatePurchaseOrderPDF(
 
   // --- ITEMS TABLE ---
   const tableItems = po.items || [];
+  const hasAnyImages = itemImages && itemImages.some(img => !!img);
+
   const tableData = tableItems.map((item, index) => {
     // Format description with attributes
     const parts = [item.item_name || 'Item'];
@@ -199,7 +227,8 @@ export function generatePurchaseOrderPDF(
       item.c2_size ? `Size: ${item.c2_size}` : '',
       item.c3_design ? `Design: ${item.c3_design}` : '',
       item.c4_colour ? `Color: ${item.c4_colour}` : '',
-      item.division ? `Div: ${item.division}` : ''
+      item.division ? `Div: ${item.division}` : '',
+      item.department ? `Dept: ${item.department}` : ''
     ].filter(Boolean).join(', ');
 
     if (attrs) {
@@ -211,6 +240,18 @@ export function generatePurchaseOrderPDF(
     const taxRate = Number(item.tax_percent) || 0;
     const total = Number(item.total_price) || (qty * unitPrice * (1 + taxRate / 100));
 
+    if (hasAnyImages) {
+      return [
+        String(index + 1),
+        '', // Image rendered in didDrawCell
+        parts.join('\n'),
+        `${qty} pcs`,
+        `Rs. ${unitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        `${taxRate}%`,
+        `Rs. ${total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      ];
+    }
+
     return [
       String(index + 1),
       parts.join('\n'),
@@ -221,9 +262,32 @@ export function generatePurchaseOrderPDF(
     ];
   });
 
+  const tableHeaders = hasAnyImages
+    ? [['#', 'Dress Photo', 'Item Description', 'Qty', 'Unit Price', 'GST', 'Total Amount']]
+    : [['#', 'Item Description', 'Qty', 'Unit Price', 'GST', 'Total Amount']];
+
+  const columnStylesConfig: any = hasAnyImages
+    ? {
+        0: { halign: 'center', cellWidth: 8 },
+        1: { halign: 'center', cellWidth: 20, minCellHeight: 18 },
+        2: { halign: 'left' },
+        3: { halign: 'center', cellWidth: 16 },
+        4: { halign: 'right', cellWidth: 26 },
+        5: { halign: 'center', cellWidth: 14 },
+        6: { halign: 'right', cellWidth: 30, fontStyle: 'bold' }
+      }
+    : {
+        0: { halign: 'center', cellWidth: 10 },
+        1: { halign: 'left' },
+        2: { halign: 'center', cellWidth: 20 },
+        3: { halign: 'right', cellWidth: 28 },
+        4: { halign: 'center', cellWidth: 16 },
+        5: { halign: 'right', cellWidth: 32, fontStyle: 'bold' }
+      };
+
   autoTable(doc, {
     startY: currentY,
-    head: [['#', 'Item Description', 'Qty', 'Unit Price', 'GST', 'Total Amount']],
+    head: tableHeaders,
     body: tableData.length > 0 ? tableData : [['-', 'No items added to this PO', '-', '-', '-', '-']],
     theme: 'grid',
     headStyles: {
@@ -239,20 +303,32 @@ export function generatePurchaseOrderPDF(
       cellPadding: 3,
       textColor: [51, 65, 85], // slate-700
       lineColor: [226, 232, 240], // slate-200
-      lineWidth: 0.2
+      lineWidth: 0.2,
+      minCellHeight: hasAnyImages ? 16 : 0
     },
-    columnStyles: {
-      0: { halign: 'center', cellWidth: 10 },
-      1: { halign: 'left' },
-      2: { halign: 'center', cellWidth: 20 },
-      3: { halign: 'right', cellWidth: 28 },
-      4: { halign: 'center', cellWidth: 16 },
-      5: { halign: 'right', cellWidth: 32, fontStyle: 'bold' }
-    },
+    columnStyles: columnStylesConfig,
     alternateRowStyles: {
       fillColor: [248, 250, 252] // light slate
     },
-    margin: { left: margin, right: margin }
+    margin: { left: margin, right: margin },
+    didDrawCell: (data) => {
+      if (hasAnyImages && data.column.index === 1 && data.cell.section === 'body') {
+        const itemImg = itemImages ? itemImages[data.row.index] : null;
+        if (itemImg) {
+          try {
+            const padding = 1.5;
+            const maxW = data.cell.width - padding * 2;
+            const maxH = data.cell.height - padding * 2;
+            const imgSize = Math.min(maxW, maxH, 15);
+            const posX = data.cell.x + (data.cell.width - imgSize) / 2;
+            const posY = data.cell.y + (data.cell.height - imgSize) / 2;
+            doc.addImage(itemImg, 'JPEG', posX, posY, imgSize, imgSize);
+          } catch {
+            // If failed to add image, cell remains clean text space
+          }
+        }
+      }
+    }
   });
 
   // Calculate table finish Y
@@ -383,21 +459,29 @@ export function generatePurchaseOrderPDF(
   return doc;
 }
 
-export function downloadPurchaseOrderPDF(
+export async function downloadPurchaseOrderPDF(
   po: PurchaseOrder,
   supplier?: Supplier,
   company?: CompanyProfile | null
-): void {
-  const doc = generatePurchaseOrderPDF(po, supplier, company);
+): Promise<void> {
+  const items = po.items || [];
+  const imagePromises = items.map(item => loadImageAsBase64(item.photo_uri || po.photo_uri));
+  const resolvedImages = await Promise.all(imagePromises);
+
+  const doc = generatePurchaseOrderPDF(po, supplier, company, resolvedImages);
   const filename = `${po.po_number || 'purchase_order'}.pdf`;
   doc.save(filename);
 }
 
-export function getPurchaseOrderPDFBlob(
+export async function getPurchaseOrderPDFBlob(
   po: PurchaseOrder,
   supplier?: Supplier,
   company?: CompanyProfile | null
-): Blob {
-  const doc = generatePurchaseOrderPDF(po, supplier, company);
+): Promise<Blob> {
+  const items = po.items || [];
+  const imagePromises = items.map(item => loadImageAsBase64(item.photo_uri || po.photo_uri));
+  const resolvedImages = await Promise.all(imagePromises);
+
+  const doc = generatePurchaseOrderPDF(po, supplier, company, resolvedImages);
   return doc.output('blob');
 }

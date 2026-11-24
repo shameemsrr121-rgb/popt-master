@@ -312,9 +312,9 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
     }
   };
 
-  const handleQuickDownloadPDF = (po: PurchaseOrder) => {
+  const handleQuickDownloadPDF = async (po: PurchaseOrder) => {
     const supp = suppliers.find(s => s.id === po.supplier_id || s.name.toLowerCase() === po.supplier_name.toLowerCase());
-    downloadPurchaseOrderPDF(po, supp, companyProfile);
+    await downloadPurchaseOrderPDF(po, supp, companyProfile);
   };
 
   // Line items for Create PO

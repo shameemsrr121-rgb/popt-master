@@ -102,7 +102,7 @@ export async function sharePurchaseOrderOnWhatsApp(
   let pdfFile: File | null = null;
 
   try {
-    const pdfBlob = getPurchaseOrderPDFBlob(po, supplier, company);
+    const pdfBlob = await getPurchaseOrderPDFBlob(po, supplier, company);
     pdfFile = new File([pdfBlob], pdfFileName, { type: 'application/pdf' });
 
     if (
@@ -137,7 +137,7 @@ export async function sharePurchaseOrderOnWhatsApp(
 
   // Fallback: Download PDF for the user to attach, and open wa.me link with formatted message
   try {
-    downloadPurchaseOrderPDF(po, supplier, company);
+    await downloadPurchaseOrderPDF(po, supplier, company);
   } catch (downloadErr) {
     console.error('PDF download error:', downloadErr);
   }
