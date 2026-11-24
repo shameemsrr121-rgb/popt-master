@@ -298,20 +298,21 @@ export const TripPlannerView: React.FC<TripPlannerViewProps> = ({
 
       {/* SCHEDULE TRIP MODAL */}
       {isCreateOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 my-8">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900">Schedule Sourcing Trip</h2>
-                <p className="text-xs text-slate-500">Plan buying travels and set budgets</p>
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm overflow-y-auto p-2 sm:p-4">
+          <div className="min-h-full flex items-center justify-center py-6 sm:py-8">
+            <div className="bg-white rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-slate-100 my-auto">
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">Schedule Sourcing Trip</h2>
+                  <p className="text-xs text-slate-500">Plan buying travels and set budgets</p>
+                </div>
+                <button
+                  onClick={() => setIsCreateOpen(false)}
+                  className="p-2 text-slate-400 hover:text-slate-600 rounded-xl"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <button
-                onClick={() => setIsCreateOpen(false)}
-                className="p-2 text-slate-400 hover:text-slate-600 rounded-xl"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
             <form onSubmit={handleCreatePlan} className="mt-4 space-y-4">
               <div>
@@ -505,6 +506,7 @@ export const TripPlannerView: React.FC<TripPlannerViewProps> = ({
             </form>
           </div>
         </div>
+      </div>
       )}
 
       {/* Live Camera Viewfinder Dialog */}

@@ -175,9 +175,10 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
 
       {/* RECEIVE GOODS MODAL */}
       {isReceivingModalOpen && selectedOrder && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-100 my-8">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm overflow-y-auto p-2 sm:p-4">
+          <div className="min-h-full flex items-center justify-center py-6 sm:py-8">
+            <div className="bg-white rounded-3xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl border border-slate-100 my-auto">
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100">
               <div>
                 <h2 className="text-xl font-bold text-slate-900">Record Received Stock</h2>
                 <p className="text-xs text-slate-500">
@@ -293,6 +294,7 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
             </div>
           </div>
         </div>
+      </div>
       )}
 
       {/* Full-size Image Viewer Modal */}

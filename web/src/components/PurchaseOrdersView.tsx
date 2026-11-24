@@ -774,9 +774,10 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
 
       {/* CREATE PURCHASE ORDER MODAL */}
       {isCreateOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-4xl w-full p-6 shadow-2xl border border-slate-100 my-8">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm overflow-y-auto p-2 sm:p-4">
+          <div className="min-h-full flex items-center justify-center py-6 sm:py-8">
+            <div className="bg-white rounded-3xl max-w-4xl w-full p-4 sm:p-6 shadow-2xl border border-slate-100 my-auto">
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100">
               <div>
                 <h2 className="text-xl font-bold text-slate-900">Create New Purchase Order</h2>
                 <p className="text-xs text-slate-500">Draft PO and line items will instantly sync with Supabase and Mobile App</p>
@@ -1423,12 +1424,14 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
             </form>
           </div>
         </div>
+      </div>
       )}
 
       {/* PO DETAIL & PRINT MODAL */}
       {selectedPOForView && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-3xl w-full p-8 shadow-2xl border border-slate-100 my-8">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm overflow-y-auto p-2 sm:p-4">
+          <div className="min-h-full flex items-center justify-center py-6 sm:py-8">
+            <div className="bg-white rounded-3xl max-w-3xl w-full p-4 sm:p-8 shadow-2xl border border-slate-100 my-auto">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 no-print">
               <span className="text-sm font-bold text-slate-400">PURCHASE ORDER INVOICE</span>
               <div className="flex items-center gap-2">
@@ -1684,6 +1687,7 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
             </div>
           </div>
         </div>
+      </div>
       )}
 
       {/* Live Camera Viewfinder Dialog for Individual Dress / Line Item */}
