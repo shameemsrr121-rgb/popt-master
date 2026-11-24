@@ -24,7 +24,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { PurchaseOrder, PurchaseOrderItem, Supplier, Location, InventoryItem, CompanyProfile, User, TaxRule, StoreHierarchyItem } from '../types';
-import { supabase, uploadPoAttachment } from '../lib/supabase';
+import { supabase, uploadPoAttachment, fileToOptimizedDataUrl } from '../lib/supabase';
 import { calculateTaxRate, getTaxFlowBadge } from '../lib/taxMaster';
 import { downloadPurchaseOrderPDF } from '../lib/pdfGenerator';
 import { sharePurchaseOrderOnWhatsApp } from '../lib/whatsappShare';
@@ -370,18 +370,29 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
     }
   };
 
-  const handleCaptureItemPhoto = async (index: number, file: File) => {
+  const handleCaptureItemPhoto = async (index: number, file: File, previewUrl?: string) => {
+    // Show immediate preview if available so the user sees their photo instantly
+    if (previewUrl) {
+      updateLineItem(index, { photo_uri: previewUrl });
+    }
     setUploadingItemIndex(index);
     try {
       const uploadedUrl = await uploadPoAttachment(file, `dress_${index + 1}`);
       if (uploadedUrl) {
         updateLineItem(index, { photo_uri: uploadedUrl });
       } else {
-        alert('Failed to upload image. Please check your network connection and try again.');
+        // Fallback to local optimized base64 if upload returned null
+        const fallbackDataUrl = await fileToOptimizedDataUrl(file);
+        updateLineItem(index, { photo_uri: fallbackDataUrl });
       }
     } catch (err: any) {
-      console.error('Error uploading line item photo:', err);
-      alert('Error uploading item photo.');
+      console.error('Error uploading line item photo, applying fallback:', err);
+      try {
+        const fallbackDataUrl = await fileToOptimizedDataUrl(file);
+        updateLineItem(index, { photo_uri: fallbackDataUrl });
+      } catch (fallbackErr) {
+        alert('Error processing item photo.');
+      }
     } finally {
       setUploadingItemIndex(null);
     }
@@ -398,7 +409,8 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
   const handleItemFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && targetUploadIndex !== null) {
-      await handleCaptureItemPhoto(targetUploadIndex, file);
+      const previewUrl = URL.createObjectURL(file);
+      await handleCaptureItemPhoto(targetUploadIndex, file, previewUrl);
     }
     setTargetUploadIndex(null);
   };
@@ -423,6 +435,11 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
       let uploadedPhotoUrl: string | null = null;
       if (selectedFile) {
         uploadedPhotoUrl = await uploadPoAttachment(selectedFile, 'po');
+        if (!uploadedPhotoUrl && previewPhotoUrl) {
+          uploadedPhotoUrl = previewPhotoUrl.startsWith('data:') 
+            ? previewPhotoUrl 
+            : await fileToOptimizedDataUrl(selectedFile);
+        }
       }
 
       const selectedSupplier = suppliers.find(s => s.id === Number(supplierId));
@@ -1652,11 +1669,11 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
           isOpen={true}
           onClose={() => setActiveItemCameraIndex(null)}
           title={`Snap Dress Photo: ${lineItems[activeItemCameraIndex]?.item_name || `Line Item #${activeItemCameraIndex + 1}`}`}
-          onPhotoCaptured={async (file) => {
+          onPhotoCaptured={async (file, previewUrl) => {
             const idx = activeItemCameraIndex;
             setActiveItemCameraIndex(null);
             if (idx !== null) {
-              await handleCaptureItemPhoto(idx, file);
+              await handleCaptureItemPhoto(idx, file, previewUrl);
             }
           }}
         />

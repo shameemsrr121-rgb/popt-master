@@ -21,7 +21,7 @@ import {
   Image as ImageIcon
 } from 'lucide-react';
 import { InventoryItem, Supplier, User, StoreHierarchyItem } from '../types';
-import { supabase, uploadPoAttachment } from '../lib/supabase';
+import { supabase, uploadPoAttachment, fileToOptimizedDataUrl } from '../lib/supabase';
 import { 
   getStoreHierarchy, 
   saveStoreHierarchyItem, 
@@ -293,6 +293,11 @@ export const InventorySuppliersView: React.FC<InventorySuppliersViewProps> = ({
       let uploadedPhotoUrl: string | null = null;
       if (selectedPhotoFile) {
         uploadedPhotoUrl = await uploadPoAttachment(selectedPhotoFile, 'inventory');
+        if (!uploadedPhotoUrl && previewPhotoUrl) {
+          uploadedPhotoUrl = previewPhotoUrl.startsWith('data:')
+            ? previewPhotoUrl
+            : await fileToOptimizedDataUrl(selectedPhotoFile);
+        }
       }
 
       // 1. Insert into inventory (storing type in category column and as part of inventory record)

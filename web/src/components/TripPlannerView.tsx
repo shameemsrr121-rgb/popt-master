@@ -16,7 +16,7 @@ import {
   Image as ImageIcon
 } from 'lucide-react';
 import { PurchasePlan, User, Supplier } from '../types';
-import { supabase, uploadPoAttachment } from '../lib/supabase';
+import { supabase, uploadPoAttachment, fileToOptimizedDataUrl } from '../lib/supabase';
 import { CameraCaptureDialog } from './CameraCaptureDialog';
 
 interface TripPlannerViewProps {
@@ -67,6 +67,11 @@ export const TripPlannerView: React.FC<TripPlannerViewProps> = ({
       let uploadedPhotoUrl: string | null = null;
       if (selectedPhotoFile) {
         uploadedPhotoUrl = await uploadPoAttachment(selectedPhotoFile, 'trip');
+        if (!uploadedPhotoUrl && previewPhotoUrl) {
+          uploadedPhotoUrl = previewPhotoUrl.startsWith('data:')
+            ? previewPhotoUrl
+            : await fileToOptimizedDataUrl(selectedPhotoFile);
+        }
       }
 
       const plannedDateMillis = new Date(fromDate).getTime();
