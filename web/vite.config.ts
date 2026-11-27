@@ -7,5 +7,16 @@ export default defineConfig({
   server: {
     port: 3000,
     open: false
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom'],
+          'supabase-vendor': ['@supabase/supabase-js'],
+          'pdf-vendor': ['jspdf', 'jspdf-autotable']
+        }
+      }
+    }
   }
 });

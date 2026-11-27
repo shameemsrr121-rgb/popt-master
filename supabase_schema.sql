@@ -216,9 +216,9 @@ END $$;
 -- INITIAL SEED DATA
 -- ========================================================
 
--- Initial Admin Account (username: admin, pass: admin123)
+-- Initial Admin Account (username: admin, pass: admin123 - SHA-256 hashed; change immediately after first login)
 INSERT INTO public.users (username, password_hash, full_name, role, is_admin, can_delete_po, show_admin_panel)
-VALUES ('admin', 'admin123', 'System Administrator', 'Administrator', true, true, true)
+VALUES ('admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 'System Administrator', 'Administrator', true, true, true)
 ON CONFLICT (username) DO NOTHING;
 
 -- Initial Company Profile
@@ -249,14 +249,60 @@ BEGIN
     EXCEPTION WHEN duplicate_object THEN NULL; END;
 END $$;
 
--- Disable Row Level Security for smooth integration
-ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.company_profile DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.suppliers DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.locations DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.inventory DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.purchase_orders DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.po_items DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.po_tax_breakdowns DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.purchase_plans DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.category_tax_rules DISABLE ROW LEVEL SECURITY;
+-- Secure login verification RPC (keeps public.users password_hash inaccessible to anon clients)
+CREATE OR REPLACE FUNCTION public.verify_user_login(p_username TEXT, p_password_hash TEXT)
+RETURNS TABLE (
+    id BIGINT,
+    username TEXT,
+    full_name TEXT,
+    role TEXT,
+    is_admin BOOLEAN,
+    show_procurement BOOLEAN,
+    show_inventory BOOLEAN,
+    show_admin_panel BOOLEAN
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT u.id, u.username, u.full_name, u.role, u.is_admin,
+           u.show_procurement, u.show_inventory, u.show_admin_panel
+    FROM public.users u
+    WHERE u.username = lower(trim(p_username))
+      AND u.password_hash = p_password_hash
+    LIMIT 1;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.verify_user_login(TEXT, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.verify_user_login(TEXT, TEXT) TO anon, authenticated;
+
+-- Enable Row Level Security across all tables (restrict access to authenticated sessions / service role)
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.company_profile ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.locations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.inventory ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.purchase_orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.po_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.po_tax_breakdowns ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.purchase_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.category_tax_rules ENABLE ROW LEVEL SECURITY;
+
+-- Example authenticated-only policies (customize per role / Supabase Auth UID as needed)
+DO $$
+DECLARE
+    tbl TEXT;
+BEGIN
+    FOREACH tbl IN ARRAY ARRAY[
+        'company_profile', 'suppliers', 'locations', 'inventory',
+        'purchase_orders', 'po_items', 'po_tax_breakdowns',
+        'purchase_plans', 'category_tax_rules'
+    ]
+    LOOP
+        EXECUTE format('DROP POLICY IF EXISTS "Authenticated full access" ON public.%I;', tbl);
+        EXECUTE format('CREATE POLICY "Authenticated full access" ON public.%I FOR ALL TO authenticated USING (true) WITH CHECK (true);', tbl);
+    END LOOP;
+END $$;

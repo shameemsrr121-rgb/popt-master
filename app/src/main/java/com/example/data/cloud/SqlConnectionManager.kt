@@ -35,13 +35,13 @@ class SqlConnectionManager private constructor(private val context: Context) {
 
     private val forbiddenDatabases = setOf("master", "model", "msdb", "tempdb", "information_schema", "sys")
 
-    // Current Server Credentials Configuration
+    // Current Server Credentials Configuration (must be provided via BuildConfig/env or user settings)
     var serverHost: String
-        get() = sharedPrefs.getString("sql_server_host", BuildConfig.SQL_SERVER_HOST.ifBlank { "103.164.3.18" }) ?: "103.164.3.18"
+        get() = sharedPrefs.getString("sql_server_host", BuildConfig.SQL_SERVER_HOST) ?: ""
         set(value) = sharedPrefs.edit().putString("sql_server_host", value.trim()).apply()
 
     var serverPort: Int
-        get() = sharedPrefs.getString("sql_server_port", BuildConfig.SQL_SERVER_PORT.ifBlank { "55200" })?.toIntOrNull() ?: 55200
+        get() = sharedPrefs.getString("sql_server_port", BuildConfig.SQL_SERVER_PORT.ifBlank { "1433" })?.toIntOrNull() ?: 1433
         set(value) = sharedPrefs.edit().putString("sql_server_port", value.toString()).apply()
 
     var databaseName: String
@@ -55,11 +55,11 @@ class SqlConnectionManager private constructor(private val context: Context) {
         }
 
     var username: String
-        get() = sharedPrefs.getString("sql_username", BuildConfig.SQL_SERVER_USER.ifBlank { "sa" }) ?: "sa"
+        get() = sharedPrefs.getString("sql_username", BuildConfig.SQL_SERVER_USER) ?: ""
         set(value) = sharedPrefs.edit().putString("sql_username", value.trim()).apply()
 
     var password: String
-        get() = sharedPrefs.getString("sql_password", BuildConfig.SQL_SERVER_PASSWORD.ifBlank { "icube@123" }) ?: "icube@123"
+        get() = sharedPrefs.getString("sql_password", BuildConfig.SQL_SERVER_PASSWORD) ?: ""
         set(value) = sharedPrefs.edit().putString("sql_password", value).apply()
 
     var tablePrefix: String

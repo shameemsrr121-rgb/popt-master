@@ -1,7 +1,7 @@
 export interface User {
   id: number;
   username: string;
-  password_hash: string;
+  password_hash?: string;
   full_name: string;
   role: string;
   is_admin: boolean;

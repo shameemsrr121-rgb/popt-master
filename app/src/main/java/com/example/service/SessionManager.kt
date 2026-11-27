@@ -63,12 +63,12 @@ object SessionManager {
             .putBoolean(KEY_SHOW_SHEETS, user.showGoogleSheets)
             .putBoolean(KEY_SHOW_ADMIN_PANEL, user.isAdmin || user.showAdminPanel)
 
+        // Never persist raw passwords in plaintext SharedPreferences
+        editor.remove(KEY_REMEMBERED_PASSWORD)
         if (rememberMe) {
             editor.putString(KEY_REMEMBERED_USERNAME, user.username.trim())
-            editor.putString(KEY_REMEMBERED_PASSWORD, rawPassword.trim())
         } else {
             editor.remove(KEY_REMEMBERED_USERNAME)
-            editor.remove(KEY_REMEMBERED_PASSWORD)
         }
 
         editor.apply()
@@ -162,24 +162,23 @@ object SessionManager {
             .remove(KEY_SHOW_ADMIN_PANEL)
             .apply()
 
-        // Restore remember me credentials if user chose to remember them
+        // Restore remembered username only (never store or restore plaintext passwords)
+        prefs.edit().remove(KEY_REMEMBERED_PASSWORD).apply()
         if (rememberMe) {
             prefs.edit()
                 .putBoolean(KEY_REMEMBER_ME, true)
                 .putString(KEY_REMEMBERED_USERNAME, rememberedUsername)
-                .putString(KEY_REMEMBERED_PASSWORD, rememberedPassword)
                 .apply()
         }
     }
 
     /**
-     * Returns remembered credentials for the login screen.
+     * Returns remembered username for the login screen (password is always empty).
      */
     fun getRememberedCredentials(context: Context): Triple<Boolean, String, String> {
         val prefs = getPrefs(context)
         val rememberMe = prefs.getBoolean(KEY_REMEMBER_ME, false)
         val username = if (rememberMe) prefs.getString(KEY_REMEMBERED_USERNAME, "") ?: "" else ""
-        val password = if (rememberMe) prefs.getString(KEY_REMEMBERED_PASSWORD, "") ?: "" else ""
-        return Triple(rememberMe, username, password)
+        return Triple(rememberMe, username, "")
     }
 }

@@ -15,7 +15,7 @@ import {
   Download,
 } from 'lucide-react';
 import { CompanyProfile, User, Location, TaxRule } from '../types';
-import { supabase } from '../lib/supabase';
+import { supabase, hashPassword } from '../lib/supabase';
 
 interface SettingsViewProps {
   companyProfile: CompanyProfile | null;
@@ -93,7 +93,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   }, []);
 
   const fetchUsers = async () => {
-    const { data } = await supabase.from('users').select('*').order('id', { ascending: true });
+    const { data } = await supabase
+      .from('users')
+      .select('id, username, full_name, role, is_admin, can_delete_po, show_procurement, show_inventory, show_supplier, show_report, show_margin, show_google_sheets, show_admin_panel, created_at, updated_at')
+      .order('id', { ascending: true });
     setUsersList(data || []);
   };
 
@@ -189,9 +192,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setIsCreatingUser(true);
     try {
       const isAdminRole = newRole === 'Administrator';
+      const hashedPassword = await hashPassword(newPassword.trim());
       const { error } = await supabase.from('users').insert({
         username: newUsername.trim().toLowerCase(),
-        password_hash: newPassword.trim(),
+        password_hash: hashedPassword,
         full_name: newFullName.trim(),
         role: newRole,
         is_admin: isAdminRole,

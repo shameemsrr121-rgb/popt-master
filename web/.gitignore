@@ -2,5 +2,6 @@ node_modules
 android
 dist
 .vercel
-
-.vercel
+.env
+.env.*
+!.env.example

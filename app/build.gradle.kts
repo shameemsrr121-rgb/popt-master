@@ -23,12 +23,12 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         val geminiApiKey: String = System.getenv("GEMINI_API_KEY") ?: ""
-        val sqlServerHost: String = (System.getenv("SQL_SERVER_HOST") ?: "103.164.3.18")
-        val sqlServerPort: String = (System.getenv("SQL_SERVER_PORT") ?: "55200")
-        val sqlServerUser: String = (System.getenv("SQL_SERVER_USER") ?: "sa")
-        val sqlServerPass: String = (System.getenv("SQL_SERVER_PASSWORD") ?: "icube@123")
-        val sqlDatabaseName: String = (System.getenv("SQL_DATABASE_NAME") ?: "pomaster_central_db")
-        val sqlTablePrefix: String = (System.getenv("SQL_TABLE_PREFIX") ?: "pomaster_")
+        val sqlServerHost: String = System.getenv("SQL_SERVER_HOST") ?: ""
+        val sqlServerPort: String = System.getenv("SQL_SERVER_PORT") ?: "1433"
+        val sqlServerUser: String = System.getenv("SQL_SERVER_USER") ?: ""
+        val sqlServerPass: String = System.getenv("SQL_SERVER_PASSWORD") ?: ""
+        val sqlDatabaseName: String = System.getenv("SQL_DATABASE_NAME") ?: "pomaster_central_db"
+        val sqlTablePrefix: String = System.getenv("SQL_TABLE_PREFIX") ?: "pomaster_"
 
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
         buildConfigField("String", "SQL_SERVER_HOST", "\"$sqlServerHost\"")
@@ -58,7 +58,8 @@ android {
   buildTypes {
     release {
       isCrunchPngs = false
-      isMinifyEnabled = false
+      isMinifyEnabled = true
+      isShrinkResources = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }

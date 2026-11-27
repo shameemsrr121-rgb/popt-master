@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Lock, User as UserIcon, ArrowRight, ShieldCheck } from 'lucide-react';
 import { User } from '../types';
-import { supabase } from '../lib/supabase';
+import { supabase, hashPassword } from '../lib/supabase';
 
 interface LoginScreenProps {
   onLoginSuccess: (user: User) => void;
@@ -31,7 +31,28 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     try {
       const sanitizedUser = username.trim().toLowerCase();
       const sanitizedPass = password.trim();
+      const hashedPass = await hashPassword(sanitizedPass);
 
+      // Prefer server-side RPC so public.users password_hash is never exposed to the client
+      const { data: rpcData, error: rpcError } = await supabase
+        .rpc('verify_user_login', {
+          p_username: sanitizedUser,
+          p_password_hash: hashedPass,
+        });
+
+      if (!rpcError && Array.isArray(rpcData)) {
+        if (rpcData.length === 0) {
+          handleFailedAttempt();
+          setIsLoading(false);
+          return;
+        }
+        setLoginAttempts(0);
+        setLockoutUntil(null);
+        onLoginSuccess(rpcData[0] as User);
+        return;
+      }
+
+      // Fallback if verify_user_login RPC has not yet been deployed to Supabase
       const { data, error } = await supabase
         .from('users')
         .select('id, username, full_name, role, is_admin, show_procurement, show_inventory, show_admin_panel, password_hash')
@@ -44,10 +65,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         return;
       }
 
-      if (data.password_hash !== sanitizedPass) {
+      const isHashedMatch = data.password_hash === hashedPass;
+      const isLegacyPlaintextMatch = data.password_hash === sanitizedPass;
+
+      if (!isHashedMatch && !isLegacyPlaintextMatch) {
         handleFailedAttempt();
         setIsLoading(false);
         return;
+      }
+
+      // Automatically upgrade legacy plaintext password rows to SHA-256
+      if (isLegacyPlaintextMatch && !isHashedMatch) {
+        await supabase
+          .from('users')
+          .update({ password_hash: hashedPass })
+          .eq('id', data.id);
       }
 
       // Reset attempts on successful authentication
