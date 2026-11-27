@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { supabase } from './lib/supabase';
 import { 
   User, 
@@ -12,12 +12,23 @@ import {
 } from './types';
 import { Navbar } from './components/Navbar';
 import { DashboardView } from './components/DashboardView';
-import { PurchaseOrdersView } from './components/PurchaseOrdersView';
-import { TripPlannerView } from './components/TripPlannerView';
-import { DeliveriesView } from './components/DeliveriesView';
-import { InventorySuppliersView } from './components/InventorySuppliersView';
-import { SettingsView } from './components/SettingsView';
 import { LoginScreen } from './components/LoginScreen';
+
+const PurchaseOrdersView = lazy(() =>
+  import('./components/PurchaseOrdersView').then((m) => ({ default: m.PurchaseOrdersView }))
+);
+const TripPlannerView = lazy(() =>
+  import('./components/TripPlannerView').then((m) => ({ default: m.TripPlannerView }))
+);
+const DeliveriesView = lazy(() =>
+  import('./components/DeliveriesView').then((m) => ({ default: m.DeliveriesView }))
+);
+const InventorySuppliersView = lazy(() =>
+  import('./components/InventorySuppliersView').then((m) => ({ default: m.InventorySuppliersView }))
+);
+const SettingsView = lazy(() =>
+  import('./components/SettingsView').then((m) => ({ default: m.SettingsView }))
+);
 
 export function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -75,36 +86,50 @@ export function App() {
     }
   };
 
+  const refreshTimerRef = useRef<number | null>(null);
+
   useEffect(() => {
     if (currentUser) {
       fetchData();
 
-      // Setup Realtime subscriptions for immediate sync with mobile devices
+      const scheduleRefresh = () => {
+        if (refreshTimerRef.current !== null) {
+          window.clearTimeout(refreshTimerRef.current);
+        }
+        refreshTimerRef.current = window.setTimeout(() => {
+          fetchData();
+        }, 300);
+      };
+
+      // Setup Realtime subscriptions for immediate sync with mobile devices (debounced)
       const channel = supabase
         .channel('schema-db-changes')
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'purchase_orders' },
-          () => fetchData()
+          scheduleRefresh
         )
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'purchase_plans' },
-          () => fetchData()
+          scheduleRefresh
         )
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'inventory' },
-          () => fetchData()
+          scheduleRefresh
         )
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'category_tax_rules' },
-          () => fetchData()
+          scheduleRefresh
         )
         .subscribe();
 
       return () => {
+        if (refreshTimerRef.current !== null) {
+          window.clearTimeout(refreshTimerRef.current);
+        }
         supabase.removeChannel(channel);
       };
     }
@@ -182,6 +207,13 @@ export function App() {
           />
         )}
 
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center py-16 text-sm font-medium text-slate-500">
+              Loading...
+            </div>
+          }
+        >
         {currentTab === 'orders' && (
           <PurchaseOrdersView
             orders={orders}
@@ -236,6 +268,7 @@ export function App() {
             onRefresh={fetchData}
           />
         )}
+        </Suspense>
       </main>
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   Plus, 
   Search, 
@@ -28,7 +28,6 @@ import {
 import { PurchaseOrder, PurchaseOrderItem, Supplier, Location, InventoryItem, CompanyProfile, User, TaxRule, StoreHierarchyItem } from '../types';
 import { supabase, uploadPoAttachment, fileToOptimizedDataUrl } from '../lib/supabase';
 import { calculateTaxRate, getTaxFlowBadge } from '../lib/taxMaster';
-import { downloadPurchaseOrderPDF } from '../lib/pdfGenerator';
 import { sharePurchaseOrderOnWhatsApp } from '../lib/whatsappShare';
 import { getStoreHierarchy } from '../lib/storeHierarchy';
 import { CameraCaptureDialog } from './CameraCaptureDialog';
@@ -315,6 +314,7 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
 
   const handleQuickDownloadPDF = async (po: PurchaseOrder) => {
     const supp = suppliers.find(s => s.id === po.supplier_id || s.name.toLowerCase() === po.supplier_name.toLowerCase());
+    const { downloadPurchaseOrderPDF } = await import('../lib/pdfGenerator');
     await downloadPurchaseOrderPDF(po, supp, companyProfile);
   };
 

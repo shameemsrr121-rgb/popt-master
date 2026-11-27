@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Search, ChevronDown, Check, X } from 'lucide-react';
 import { Supplier } from '../types';
 
@@ -48,13 +48,17 @@ export const SearchableSupplierSelect: React.FC<SearchableSupplierSelectProps> =
   }, [isOpen]);
 
   const normalizedQuery = query.trim().toLowerCase();
-  const filteredSuppliers = normalizedQuery
-    ? suppliers.filter(
-        (s) =>
-          s.name.toLowerCase().includes(normalizedQuery) ||
-          (s.code && s.code.toLowerCase().includes(normalizedQuery))
-      )
-    : suppliers;
+  const filteredSuppliers = useMemo(
+    () =>
+      normalizedQuery
+        ? suppliers.filter(
+            (s) =>
+              s.name.toLowerCase().includes(normalizedQuery) ||
+              (s.code && s.code.toLowerCase().includes(normalizedQuery))
+          )
+        : suppliers,
+    [suppliers, normalizedQuery]
+  );
 
   return (
     <div ref={containerRef} className="relative">
@@ -192,9 +196,13 @@ export const SearchableDepartmentInput: React.FC<SearchableDepartmentInputProps>
   }, [isOpen]);
 
   const activeFilter = (searchQuery || value).trim().toLowerCase();
-  const filteredOptions = activeFilter
-    ? options.filter((opt) => opt.toLowerCase().includes(activeFilter))
-    : options;
+  const filteredOptions = useMemo(
+    () =>
+      activeFilter
+        ? options.filter((opt) => opt.toLowerCase().includes(activeFilter))
+        : options,
+    [options, activeFilter]
+  );
 
   return (
     <div ref={containerRef} className="relative">
