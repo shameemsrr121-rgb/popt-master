@@ -96,6 +96,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   const isAdmin = currentUser?.is_admin === true;
+  const canInstallApp = !isInstalled && (isAdmin || currentUser?.show_admin_panel === true);
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, visible: true },
@@ -155,8 +156,8 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* User Session Info, Install App, Logout & Mobile Hamburger */}
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-            {/* Download APK / iPhone Install Button */}
-            {!isInstalled && (
+            {/* Unified Install App Button (Role-gated, single entry point) */}
+            {canInstallApp && (
               isIOS ? (
                 <button
                   type="button"
@@ -166,6 +167,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Install on iPhone</span>
+                </button>
+              ) : isInstallable ? (
+                <button
+                  type="button"
+                  onClick={handleInstallClick}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-600 hover:text-white transition-all shadow-sm text-xs font-semibold"
+                  title="Install App on phone or desktop"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Install App</span>
                 </button>
               ) : (
                 <div className="flex items-center rounded-lg bg-emerald-600/30 border border-emerald-500/40 shadow-sm overflow-hidden group">
@@ -199,15 +210,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               )
             )}
-
-            {/* Install PWA Button */}
-            <button
-              onClick={handleInstallClick}
-              className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
-              title="Install Web App on phone or desktop"
-            >
-              <span>Install PWA</span>
-            </button>
 
             <div className="hidden lg:flex flex-col text-right">
               <span className="text-sm font-semibold text-slate-200">
@@ -293,14 +295,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 {currentUser?.role || (currentUser?.is_admin ? 'Administrator' : 'User')}
               </p>
             </div>
-            {isInstallable && (
-              <button
-                onClick={handleInstallClick}
-                className="px-2.5 py-1 text-xs rounded bg-indigo-600 text-white font-medium"
-              >
-                Install App
-              </button>
-            )}
           </div>
           {navItems.map((item) => {
             if (!item.visible) return null;

@@ -368,15 +368,31 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <a
-            href="/POPT-Master.apk"
-            download="POPT-Master.apk"
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 text-indigo-300 hover:text-white hover:bg-indigo-600 transition-all border border-slate-700"
-            title="Download Android APK (4.2 MB)"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Download Android APK</span>
-          </a>
+          {typeof window !== 'undefined' && /iphone|ipad|ipod/i.test(window.navigator.userAgent) ? (
+            <button
+              type="button"
+              onClick={() =>
+                alert(
+                  'To install POPT on iPhone/iPad:\n1. Tap the Safari Share icon (square with arrow pointing up).\n2. Scroll down and tap "Add to Home Screen", then tap "Add".'
+                )
+              }
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold bg-sky-600/30 text-sky-200 hover:text-white hover:bg-sky-600 transition-all border border-sky-500/40"
+              title="Install on iPhone / iPad"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Install on iPhone</span>
+            </button>
+          ) : (
+            <a
+              href="/POPT-Master.apk"
+              download="POPT-Master.apk"
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 text-indigo-300 hover:text-white hover:bg-indigo-600 transition-all border border-slate-700"
+              title="Download Android APK"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download Android APK</span>
+            </a>
+          )}
         </div>
       </div>
 
