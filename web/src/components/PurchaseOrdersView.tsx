@@ -32,6 +32,7 @@ import { downloadPurchaseOrderPDF } from '../lib/pdfGenerator';
 import { sharePurchaseOrderOnWhatsApp } from '../lib/whatsappShare';
 import { getStoreHierarchy } from '../lib/storeHierarchy';
 import { CameraCaptureDialog } from './CameraCaptureDialog';
+import { SearchableSupplierSelect, SearchableDepartmentInput } from './SearchableDropdowns';
 
 interface PurchaseOrdersViewProps {
   orders: PurchaseOrder[];
@@ -1036,19 +1037,12 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                       </div>
                     ) : (
                       <>
-                        <select
+                        <SearchableSupplierSelect
+                          suppliers={suppliers}
                           value={supplierId}
-                          onChange={(e) => setSupplierId(Number(e.target.value))}
-                          className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs appearance-auto cursor-pointer"
+                          onChange={(id) => setSupplierId(id)}
                           required
-                        >
-                          <option value="" className="text-slate-500 bg-white">-- Choose Supplier --</option>
-                          {suppliers.map(s => (
-                            <option key={s.id} value={s.id} className="text-slate-900 bg-white font-medium">
-                              {s.name} {s.code ? `(${s.code})` : ''}
-                            </option>
-                          ))}
-                        </select>
+                        />
 
                         {suppliers.length === 0 && (
                           <div className="mt-1.5 flex items-center justify-between text-xs text-amber-700 bg-amber-50 p-2 rounded-lg border border-amber-200">
@@ -1083,22 +1077,19 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                       <span className="w-4 h-4 rounded-full bg-indigo-600 text-white inline-flex items-center justify-center text-[10px]">2</span>
                       Department * (Auto-Hierarchy)
                     </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        list="dept-options-list"
-                        placeholder="Type or select Department..."
-                        value={selectedDepartment}
-                        onChange={(e) => handleDepartmentChange(e.target.value)}
-                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
-                        required
-                      />
-                      <datalist id="dept-options-list">
-                        {Array.from(new Set(hierarchyList.map(h => h.department).concat(inventory.map(i => i.department).filter(Boolean)))).map(dept => (
-                          <option key={dept} value={dept} />
-                        ))}
-                      </datalist>
-                    </div>
+                    <SearchableDepartmentInput
+                      options={Array.from(
+                        new Set(
+                          hierarchyList
+                            .map((h) => h.department)
+                            .concat(inventory.map((i) => i.department).filter(Boolean))
+                        )
+                      )}
+                      value={selectedDepartment}
+                      onChange={(dept) => handleDepartmentChange(dept)}
+                      placeholder="Type or select Department..."
+                      required
+                    />
 
                     {/* Auto-populated Hierarchy badge */}
                     <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
@@ -1317,19 +1308,13 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({
                               {/* Per-Item Department Selection */}
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="text-[10px] font-bold text-slate-500">Dept:</span>
-                                <input
-                                  type="text"
-                                  list={`dept-list-${idx}`}
-                                  placeholder="Select or type department..."
+                                <SearchableDepartmentInput
+                                  options={Array.from(new Set(hierarchyList.map(h => h.department).filter(Boolean)))}
                                   value={item.department ?? ''}
-                                  onChange={(e) => handleItemDepartmentChange(idx, e.target.value)}
-                                  className="px-2 py-1 bg-white border border-slate-300 rounded-md text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-36"
+                                  onChange={(dept) => handleItemDepartmentChange(idx, dept)}
+                                  placeholder="Select or type dept..."
+                                  compact
                                 />
-                                <datalist id={`dept-list-${idx}`}>
-                                  {Array.from(new Set(hierarchyList.map(h => h.department).filter(Boolean))).map(d => (
-                                    <option key={d} value={d} />
-                                  ))}
-                                </datalist>
                                 {(item.division || autoDivision) && (
                                   <span className="text-[10px] text-slate-400">
                                     ({item.division || autoDivision} &gt; {item.section || autoSection || 'Main'})
